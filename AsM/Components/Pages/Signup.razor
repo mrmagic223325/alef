@@ -1,0 +1,53 @@
+@page "/Signup"
+@using System.ComponentModel.DataAnnotations
+
+<PageTitle>Sign up to AsM</PageTitle>
+
+<MudGrid Style="overflow: hidden !important; height: 100%; width: 100%;">
+    <MudItem Class="d-flex align-center justify-center mud-width-full mt-14" xs="12">
+        <EditForm Model="@_model" style="width: 50%;" OnValidSubmit="OnValidSubmit">
+            <DataAnnotationsValidator/>
+            <MudCard>
+                <MudCardContent>
+                    <MudTextField Label="Username" HelperText="Max. 8 characters" bind-Value="@_model.Username" For="@(() => _model.Username)"/>
+                    <MudTextField Label="Email" Class="mt-3" bind-Value="@_model.Email" For="@(() => _model.Email)"/>
+                    <MudTextField Label="Password" Class="mt-3" HelperText="Choose a strong password" bind-Value="@_model.Password" For="@(() => _model.Password)"/>
+                    <MudTextField Label="Repeat password" Class="mt-3" HelperText="Repeat the password" bind-Value="@_model.PasswordRepeat" For="@(() => _model.PasswordRepeat)"/>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" Class="ml-auto">Sign up</MudButton>
+                </MudCardActions>
+            </MudCard>
+        </EditForm>
+    </MudItem>
+</MudGrid>
+@code
+{
+    readonly SignupForm _model = new SignupForm();
+    bool _success;
+
+    public class SignupForm
+    {
+        [Required]
+        [StringLength(8, ErrorMessage = "Username can not be longer than 8 characters.")]
+        public string? Username { get; set; }
+        
+        [Required]
+        [EmailAddress(ErrorMessage = "E-mail address must be valid.")]
+        public string? Email { get; set; }
+        
+        [Required]
+        [StringLength(30, ErrorMessage = "Password must be at least 8 characters long.", MinimumLength = 8)]
+        public string? Password { get; set; }
+        
+        [Required]
+        [Compare(nameof(Password))]
+        public string? PasswordRepeat { get; set; }
+    }
+
+    private void OnValidSubmit(EditContext context)
+    {
+        _success = true;
+        StateHasChanged();
+    }
+}

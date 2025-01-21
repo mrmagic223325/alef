@@ -1,0 +1,35 @@
+﻿@page "/"
+@using AsM.Models
+@inject PersistentComponentState State
+
+<PageTitle>Home</PageTitle>
+
+@foreach (var user in _users)
+{
+    <p>@user.Id</p>
+}
+
+@code
+{
+    User? _user = new();
+    List<User>? _users = [];
+    private PersistingComponentStateSubscription _subscription;
+    
+    protected override async Task OnInitializedAsync()
+    {
+        _subscription = State.RegisterOnPersisting(Persist);
+        var foundUsers = State.TryTakeFromJson<List<User>>("users", out var users);
+        var foundUser = State.TryTakeFromJson<User>("user", out var user);
+        _user = foundUser ? user : await DbHelper.GetUser(Guid.Parse("235552a9-f05d-4ecc-a24c-38eca9263582"));
+        _users = foundUsers ? users : await DbHelper.GetUsers();
+        
+        await base.OnInitializedAsync();
+    }
+
+    private Task Persist()
+    {
+        State.PersistAsJson("user", _user);
+        State.PersistAsJson("users", _users);
+        return Task.CompletedTask;
+    }
+}

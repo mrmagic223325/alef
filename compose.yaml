@@ -1,0 +1,21 @@
+services:
+  web:
+    build: .
+    environment:
+      IS_DOCKER: "true"
+      ASPNETCORE_ENVIRONMENT: "Development"
+    ports:
+     - "5000:8080"
+    volumes:
+      - keyvolume:/root/.aspnet/DataProtection-Keys
+
+  cassandra:
+    image: "asm-cassandra"
+    ports:
+      - "9042:9042"
+    volumes:
+      - cassandra:/var/lib/cassandra
+
+volumes:
+  cassandra:
+  keyvolume:
