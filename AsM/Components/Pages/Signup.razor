@@ -1,53 +1,192 @@
 @page "/Signup"
-@using System.ComponentModel.DataAnnotations
+@using System.Net
+@using System.Net.Mail
+@using System.Text
+@using System.Text.RegularExpressions
+@using Cassandra
+@using FluentValidation
+
+@inject IDialogService DialogService
 
 <PageTitle>Sign up to AsM</PageTitle>
 
 <MudGrid Style="overflow: hidden !important; height: 100%; width: 100%;">
     <MudItem Class="d-flex align-center justify-center mud-width-full mt-14" xs="12">
-        <EditForm Model="@_model" style="width: 50%;" OnValidSubmit="OnValidSubmit">
-            <DataAnnotationsValidator/>
+        <MudForm Model="@_model" @ref="@_form" style="width: 50%;" Validation="@(_validator.ValidateValue)" ValidationDelay="0">
             <MudCard>
                 <MudCardContent>
-                    <MudTextField Label="Username" HelperText="Max. 8 characters" bind-Value="@_model.Username" For="@(() => _model.Username)"/>
-                    <MudTextField Label="Email" Class="mt-3" bind-Value="@_model.Email" For="@(() => _model.Email)"/>
-                    <MudTextField Label="Password" Class="mt-3" HelperText="Choose a strong password" bind-Value="@_model.Password" For="@(() => _model.Password)"/>
-                    <MudTextField Label="Repeat password" Class="mt-3" HelperText="Repeat the password" bind-Value="@_model.PasswordRepeat" For="@(() => _model.PasswordRepeat)"/>
+                    <MudTextField Label="Display name" HelperText="Max. 32 characters" MaxLength="32" @bind-Value="_model.Displayname" For="@(() => _model.Displayname)" Immediate="true" />
+                    <MudTextField Label="Username" HelperText="Max. 16 characters" MaxLength="16" @bind-Value="_model.Username" For="@(() => _model.Username)" Immediate="true" />
+                    <MudTextField Label="Email" Class="mt-3" @bind-Value="_model.Email" For="@(() => _model.Email)" Immediate="false" />
+                    <MudTextField Label="Password" Class="mt-3" HelperText="Choose a strong password" InputType="InputType.Password" @bind-Value="_model.Password" For="@(() => _model.Password)" Immediate="true" />
+                    <MudTextField Label="Repeat password" Class="mt-3" HelperText="Repeat the password" InputType="InputType.Password" @bind-Value="_model.PasswordRepeat" For="@(() => _model.PasswordRepeat)" Immediate="true" />
                 </MudCardContent>
                 <MudCardActions>
-                    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" Class="ml-auto">Sign up</MudButton>
+                    <MudButton Variant="Variant.Filled" OnClick="@(async () => await Submit())" Color="Color.Primary" Class="ml-auto">Sign up</MudButton>
                 </MudCardActions>
             </MudCard>
-        </EditForm>
+        </MudForm>
     </MudItem>
 </MudGrid>
+
 @code
 {
-    readonly SignupForm _model = new SignupForm();
-    bool _success;
+    MudForm _form = null!;
 
-    public class SignupForm
+    readonly ModelValidator _validator = new();
+    readonly SignupForm _model = new();
+    
+    public class ModelValidator : AbstractValidator<SignupForm>
     {
-        [Required]
-        [StringLength(8, ErrorMessage = "Username can not be longer than 8 characters.")]
-        public string? Username { get; set; }
-        
-        [Required]
-        [EmailAddress(ErrorMessage = "E-mail address must be valid.")]
-        public string? Email { get; set; }
-        
-        [Required]
-        [StringLength(30, ErrorMessage = "Password must be at least 8 characters long.", MinimumLength = 8)]
-        public string? Password { get; set; }
-        
-        [Required]
-        [Compare(nameof(Password))]
-        public string? PasswordRepeat { get; set; }
+        public ModelValidator()
+        {
+            RuleFor(x => x.Displayname).Cascade(CascadeMode.Stop).NotEmpty().MaximumLength(32).WithMessage("Displayname can not be longer than 32 characters.");
+            RuleFor(x => x.Email).Cascade(CascadeMode.Stop).NotEmpty().EmailAddress().MustAsync(async (v, _) => await CheckEmail(v)).WithMessage("Email address is already used.");
+            RuleFor(x => x.Username).Cascade(CascadeMode.Stop).NotEmpty().MaximumLength(16).WithMessage("Username must be 16 characters or less").MustAsync(async (v, _) => await CheckUsername(v)).WithMessage("Username is already taken.");
+            RuleFor(x => x.Password).Cascade(CascadeMode.Stop).NotEmpty().MinimumLength(8).WithMessage("Password must be at least 8 characters long.").Matches(new Regex("[A-Z]")).WithMessage("Password must include at least one uppercase character.").Matches(new Regex("[a-z]")).WithMessage("Password must include at least one lowercase character").Matches(new Regex("[0-9]")).WithMessage("Password must include at least one digit.").Matches(@"[][""!@$%^&*(){}:;<>,.?/+_=|'~\\-]").WithMessage("Password must include at least one symbol.");
+            RuleFor(x => x.PasswordRepeat).Cascade(CascadeMode.Stop).NotEmpty().Equal(x => x.Password).WithMessage("Passwords do not match");
+        }
+
+        public Func<object, string, Task<IEnumerable<string>>> ValidateValue => async (model, property) =>
+        {
+            var r = await ValidateAsync(ValidationContext<SignupForm>.CreateWithOptions((SignupForm)model, x => x.IncludeProperties(property)));
+            if (r.IsValid)
+                return Array.Empty<string>();
+            return r.Errors.Select(e => e.ErrorMessage);
+        };
     }
 
-    private void OnValidSubmit(EditContext context)
+    private static async Task<bool> CheckEmail(string v)
     {
-        _success = true;
-        StateHasChanged();
+        var cluster = Cluster.Builder().AddContactPoint(Environment.GetEnvironmentVariable("IS_DOCKER") == "true" ? "cassandra" : "localhost").Build();
+        var session = await cluster.ConnectAsync("accounts");
+
+        try
+        {
+            var statement = await session.PrepareAsync("SELECT count(*) FROM accounts.users WHERE email = ? ALLOW FILTERING;");
+            var res = await session.ExecuteAsync(statement.Bind(v));
+
+            if (res.First().GetValue<Int64?>("count") != 0)
+            {
+                return false;
+            }
+
+            return true;
+        }
+        finally
+        {
+            await session.ShutdownAsync();
+            await cluster.ShutdownAsync();
+        }
+    }
+
+    private static async Task<bool> CheckUsername(string v)
+    {
+        var cluster = Cluster.Builder().AddContactPoint(Environment.GetEnvironmentVariable("IS_DOCKER") == "true" ? "cassandra" : "localhost").Build();
+        var session = await cluster.ConnectAsync("accounts");
+
+        try
+        {
+            var statement = await session.PrepareAsync("SELECT count(*) FROM accounts.users WHERE username = ? ALLOW FILTERING;");
+            var res = await session.ExecuteAsync(statement.Bind(v));
+
+            if (res.First().GetValue<Int64?>("count") != 0)
+            {
+                return false;
+            }
+
+            return true;
+        }
+        finally
+        {
+            await session.ShutdownAsync();
+            await cluster.ShutdownAsync();
+        }
+    }
+    
+    public class SignupForm
+    {
+        public string Displayname { get; set; } = string.Empty;
+
+        public string Username { get; set; } = string.Empty;
+        
+        public string Email { get; set; } = string.Empty;
+        
+        public string Password { get; set; } = string.Empty;
+        
+        public string PasswordRepeat { get; set; } = string.Empty;
+    }
+
+    private Task OpenEmailDialog()
+    {
+        var options = new DialogOptions { CloseOnEscapeKey = false, CloseButton = false, };
+
+        var p = new DialogParameters<EmailDialog>()
+        {
+            { x => x.Address, _model.Email },
+        };
+        return DialogService.ShowAsync<EmailDialog>("Confirm email address", p ,options);
+    }
+
+    private async Task Submit()
+    {
+        await _form.Validate();
+        
+        if (_form.IsValid)
+        {
+            _model.Username = _model.Username.ToLower();
+            await DbHelper.CreateUser(_model);
+            StateHasChanged();
+            SendEmail();
+            await OpenEmailDialog();
+        }
+    }
+
+    private bool SendEmail()
+    {
+        SmtpClient client = new SmtpClient()
+        {
+            // TODO: Extract
+            UseDefaultCredentials = true,
+            Host = "0.0.0.0",
+            Port = 1025,
+            EnableSsl = false,
+            Credentials = new NetworkCredential("a@a.com", "a"),
+        };
+
+        MailAddress from = new("a@a.com", "AsM");
+        MailAddress to = new(_model.Email, _model.Username);
+        
+        
+        
+        MailMessage message = new MailMessage(from, to)
+        {
+            Subject = "X",
+            SubjectEncoding = Encoding.UTF8,
+            
+            Body = "Y",
+            BodyEncoding = Encoding.UTF8,
+            
+            HeadersEncoding = Encoding.UTF8,
+            IsBodyHtml = true,
+            AlternateViews = { AlternateView.CreateAlternateViewFromString("Z") },
+            Priority = MailPriority.High,
+        };
+
+        try
+        {
+            client.Send(message);
+
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e.Message);
+        }
+        finally
+        {
+            client.Dispose();
+            message.Dispose();
+        }
+        return true;
     }
 }

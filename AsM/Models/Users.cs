@@ -11,11 +11,13 @@ public class User
 {
     [Column("id")]
     public Guid Id { get; set; }
+    
     [Column("dob")]
     public LocalDate Dob { get; set; }
-    [Column("email")]
-    [EmailAddress]
+    
+    [Column("email")] 
     public string Email { get; set; }
+    
     [Column("username")]
     public string Username { get; set; }
 }

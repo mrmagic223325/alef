@@ -1,0 +1,24 @@
+<MudDialog>
+    <TitleContent>
+        Confirm Email address
+    </TitleContent>
+    <DialogContent>
+        An email has been sent to @Address. Please click the link in the email to confirm your address.
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Submit" Color="Color.Primary">Done</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code
+{
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; }
+
+    
+    // TODO: Only allow close after Email actually confirmed
+    private void Submit() => MudDialog.Close(DialogResult.Ok(true));
+    
+    [Parameter]
+    public string Address { get; set; }
+}

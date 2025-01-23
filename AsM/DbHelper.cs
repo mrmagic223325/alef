@@ -1,3 +1,4 @@
+using AsM.Components.Pages;
 using AsM.Models;
 using Cassandra;
 using ISession = Cassandra.ISession;
@@ -6,6 +7,25 @@ namespace AsM;
 
 public static class DbHelper
 {
+    
+    public static async Task<bool> CreateUser(Signup.SignupForm form)
+    {
+        var cluster = Cluster.Builder().AddContactPoint(Environment.GetEnvironmentVariable("IS_DOCKER") == "true" ? "cassandra" : "localhost").Build();
+        var session = await cluster.ConnectAsync("accounts");
+
+        try
+        {
+            var statement = await session.PrepareAsync("INSERT INTO accounts.users (id, dob, email, username, displayname) VALUES (uuid(), ?, ?, ?, ?)");
+            await session.ExecuteAsync(statement.Bind(null, form.Email, form.Username, form.Displayname));
+        }
+        finally
+        {
+            await session.ShutdownAsync();
+            await cluster.ShutdownAsync();
+        }
+        return true;
+    }
+    
     public static async Task<User?> GetUser(Guid id)
     {
         // If running in Docker use cassandra as hostname, otherwise localhost
