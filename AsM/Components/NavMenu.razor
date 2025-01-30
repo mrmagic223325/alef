@@ -1,14 +1,12 @@
 <MudNavMenu Margin="Margin.Normal" Color="Color.Primary" Rounded="true">
     <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.TwoTone.Home">Home</MudNavLink>
     <MudDivider />
-    <CascadingAuthenticationState>
         <AuthorizeView>
             <NotAuthorized>
-                <MudNavLink Href="/Signup" Match="NavLinkMatch.All" Icon="@Icons.Material.TwoTone.Login"><MudText Style="overflow: hidden; white-space: nowrap;">Sign up</MudText></MudNavLink>
+                <MudNavLink Href="/Account/Signup" Match="NavLinkMatch.All" Icon="@Icons.Material.TwoTone.Login"><MudText Style="overflow: hidden; white-space: nowrap;">Sign up</MudText></MudNavLink>
             </NotAuthorized>
             <Authorized>
                 <MudNavLink Href="/Profile" Match="NavLinkMatch.All" Icon="@Icons.Material.TwoTone.AccountBox">Profile</MudNavLink>
             </Authorized>
         </AuthorizeView>
-    </CascadingAuthenticationState>
 </MudNavMenu>

@@ -1,23 +1,66 @@
+@using AsM.Models
+@using Cassandra
+
 <MudDialog>
     <TitleContent>
         Confirm Email address
     </TitleContent>
     <DialogContent>
-        An email has been sent to @Address. Please click the link in the email to confirm your address.
+        An email has been sent to @Address. Please enter the code in the email to confirm your address.
+        <MudDivider />
+        <MudTextField Label="Code" HelperText="Enter the code received at your email address" MaxLength="8" @bind-Value="Code" Immediate="true" />
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Submit" Color="Color.Primary">Done</MudButton>
+        <MudButton OnClick="Submit" Color="Color.Primary">Verify</MudButton>
+        <MudButton OnClick="Resend" Color="Color.Secondary">Resend code</MudButton>
     </DialogActions>
 </MudDialog>
 
 @code
 {
+
+    public string Code = "";
+    
     [CascadingParameter]
     private IMudDialogInstance MudDialog { get; set; }
 
     
+    private void Resend()
+    {}
+    
+    
     // TODO: Only allow close after Email actually confirmed
-    private void Submit() => MudDialog.Close(DialogResult.Ok(true));
+    private async Task Submit()
+    {
+        if (Code.Length == 8)
+        {
+            // TODO: Check if code matches email
+            var cluster = Cluster.Builder().AddContactPoint(Environment.GetEnvironmentVariable("IS_DOCKER") == "true" ? "cassandra" : "localhost").Build();
+
+            var session = await cluster.ConnectAsync("accounts");
+            try
+            {
+                var statement = await session.PrepareAsync("SELECT id FROM email_verification WHERE email = ?");
+                var res = (await session.ExecuteAsync(statement.Bind(Address))).FirstOrDefault();
+
+                if (res == null)
+                    return;
+                var code = res.GetValue<string>("id");
+
+                if (Code == code)
+                {
+                    statement = await session.PrepareAsync("DELETE FROM email_verification WHERE email = ?");
+                    await session.ExecuteAsync(statement.Bind(Address));
+                    MudDialog.Close(DialogResult.Ok(true));
+                }
+            }
+            finally
+            {
+                await session.ShutdownAsync();
+                await cluster.ShutdownAsync();
+            }
+        }
+    }
     
     [Parameter]
     public string Address { get; set; }

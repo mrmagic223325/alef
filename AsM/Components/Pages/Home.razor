@@ -4,6 +4,10 @@
 
 <PageTitle>Home</PageTitle>
 
+<AuthorizeView>
+    You're logged in!
+</AuthorizeView>
+
 @foreach (var user in _users)
 {
     <p>@user.Id</p>

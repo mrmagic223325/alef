@@ -1,12 +1,55 @@
-using AsM.Components.Pages;
+using System.Security.Cryptography;
+using AsM.Components.Pages.Account;
 using AsM.Models;
 using Cassandra;
-using ISession = Cassandra.ISession;
 
 namespace AsM;
 
+public class DatabaseService
+{
+    public Cluster Cluster { get; set; } = Cluster.Builder().AddContactPoint(Environment.GetEnvironmentVariable("IS_DOCKER") == "true" ? "cassandra" : "localhost").Build();
+}
+
+
 public static class DbHelper
 {
+
+    // TODO: Error Handling
+    public static async Task<bool> InsertPassword(Guid id, string password)
+    {
+        var cluster = Cluster.Builder().AddContactPoint(Environment.GetEnvironmentVariable("IS_DOCKER") == "true" ? "cassandra" : "localhost").Build();
+        var session = await cluster.ConnectAsync("accounts");
+
+        byte[] salt;
+        RandomNumberGenerator.Create().GetBytes(salt = new byte[16]);
+
+        // Create the Rfc2898DeriveBytes instance
+        var pbkdf2 = new Rfc2898DeriveBytes(password, salt, 10000, HashAlgorithmName.SHA512);
+        
+        // Get the hash
+        byte[] hash = pbkdf2.GetBytes(20);
+
+        // Combine salt and hash
+        byte[] hashBytes = new byte[36];
+        Array.Copy(salt, 0, hashBytes, 0, 16);
+        Array.Copy(hash, 0, hashBytes, 16, 20);
+
+
+        
+        try
+        {
+            var statement = await session.PrepareAsync("INSERT INTO accounts.credentials (id, hash) VALUES (?, ?)");
+            await session.ExecuteAsync(statement.Bind(id, Convert.ToBase64String(hashBytes)));
+        }
+        finally
+        {
+            await session.ShutdownAsync();
+            await cluster.ShutdownAsync();
+        }
+
+        return true;
+    }
+    
     
     public static async Task<bool> CreateUser(Signup.SignupForm form)
     {
@@ -15,8 +58,8 @@ public static class DbHelper
 
         try
         {
-            var statement = await session.PrepareAsync("INSERT INTO accounts.users (id, dob, email, username, displayname) VALUES (uuid(), ?, ?, ?, ?)");
-            await session.ExecuteAsync(statement.Bind(null, form.Email, form.Username, form.Displayname));
+            var statement = await session.PrepareAsync("INSERT INTO accounts.users (id, dob, email, username, displayname) VALUES (?, ?, ?, ?, ?)");
+            await session.ExecuteAsync(statement.Bind(form.Id, null, form.Email, form.Username, form.Displayname));
         }
         finally
         {
@@ -25,11 +68,13 @@ public static class DbHelper
         }
         return true;
     }
-    
+
     public static async Task<User?> GetUser(Guid id)
     {
-        // If running in Docker use cassandra as hostname, otherwise localhost
-        var cluster = Cluster.Builder().AddContactPoint(Environment.GetEnvironmentVariable("IS_DOCKER") == "true" ? "cassandra" : "localhost").Build();
+        // If running in Docker, use cassandra as hostname, otherwise localhost
+        var cluster = Cluster.Builder()
+            .AddContactPoint(Environment.GetEnvironmentVariable("IS_DOCKER") == "true" ? "cassandra" : "localhost")
+            .Build();
 
         var session = await cluster.ConnectAsync("accounts");
         try
@@ -54,8 +99,8 @@ public static class DbHelper
             await session.ShutdownAsync();
             await cluster.ShutdownAsync();
         }
-}
-    
+    }
+
     public static async Task<List<User>?> GetUsers()
     {
         var cluster = Cluster.Builder().AddContactPoint(Environment.GetEnvironmentVariable("IS_DOCKER") == "true" ? "cassandra" : "localhost").Build();

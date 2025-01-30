@@ -1,4 +1,10 @@
-﻿@inherits LayoutComponentBase
+﻿@using AsM.Components.Pages
+@using Cassandra
+@inherits LayoutComponentBase
+
+@inject IDialogService DialogService
+@inject DatabaseService DBHelper
+
 
 @* Required *@
 <MudThemeProvider />
@@ -15,13 +21,36 @@
         <NavMenu />
     </MudDrawer>
     <MudContainer Class="mud-height-full d-flex">
+        @if (NeedsEmailVerification)
+        {
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Elevation="12" OnClick="OpenEmailDialog">Confirm your e-mail address </MudAlert>
+        }
         @Body
     </MudContainer>
 </MudDrawerContainer>
 
 @code
 {
+    bool NeedsEmailVerification;
     bool _open = false;
+
+    protected override async Task<Task> OnInitializedAsync()
+    {
+        var session = DBHelper.Cluster.Connect("accounts");
+        //var statement = await session.PrepareAsync("");
+        
+        return base.OnInitializedAsync();
+    }
+
+    private Task OpenEmailDialog()
+    {
+        var options = new DialogOptions { CloseOnEscapeKey = false, CloseButton = false, BackdropClick = false };
+
+        var p = new DialogParameters<EmailDialog>()
+        {
+        };
+        return DialogService.ShowAsync<EmailDialog>("Confirm email address", p ,options);
+    }
 }
 
 <div id="blazor-error-ui" data-nosnippet>

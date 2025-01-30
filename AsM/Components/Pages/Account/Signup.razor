@@ -1,14 +1,23 @@
-@page "/Signup"
+@page "/Account/Signup"
+
 @using System.Net
 @using System.Net.Mail
+@using System.Security.Claims
+@using System.Security.Cryptography
 @using System.Text
 @using System.Text.RegularExpressions
 @using Cassandra
 @using FluentValidation
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
 
 @inject IDialogService DialogService
+@inject IConfiguration Configuration
+@inject IHttpContextAccessor Context
 
 <PageTitle>Sign up to AsM</PageTitle>
+
+<MudButton OnClick="@(async () => await OpenEmailDialog())" Variant="Variant.Filled" Color="Color.Primary" />
 
 <MudGrid Style="overflow: hidden !important; height: 100%; width: 100%;">
     <MudItem Class="d-flex align-center justify-center mud-width-full mt-14" xs="12">
@@ -106,6 +115,7 @@
     
     public class SignupForm
     {
+        public Guid Id { get; set; } = Guid.NewGuid();
         public string Displayname { get; set; } = string.Empty;
 
         public string Username { get; set; } = string.Empty;
@@ -119,7 +129,7 @@
 
     private Task OpenEmailDialog()
     {
-        var options = new DialogOptions { CloseOnEscapeKey = false, CloseButton = false, };
+        var options = new DialogOptions { CloseOnEscapeKey = false, CloseButton = false, BackdropClick = false };
 
         var p = new DialogParameters<EmailDialog>()
         {
@@ -136,35 +146,40 @@
         {
             _model.Username = _model.Username.ToLower();
             await DbHelper.CreateUser(_model);
+            await DbHelper.InsertPassword(_model.Id, _model.Password);
             StateHasChanged();
-            SendEmail();
+            await SendEmail(_model.Email);
             await OpenEmailDialog();
         }
     }
 
-    private bool SendEmail()
+    private async Task<bool> SendEmail(string email)
     {
+        var x = Enumerable.Range('a', 'z' - 'a' + 1).Select(i => (char)i).ToList();
+        x.AddRange(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']);
+            
+        var code = RandomNumberGenerator.GetString(x.ToArray().AsSpan(), 8);
+        
         SmtpClient client = new SmtpClient()
         {
             // TODO: Extract
             UseDefaultCredentials = true,
-            Host = "0.0.0.0",
-            Port = 1025,
+            Host = Configuration["Mail:Host"]!,
+            Port = int.Parse(Configuration["Mail:Port"]!),
             EnableSsl = false,
-            Credentials = new NetworkCredential("a@a.com", "a"),
+            Credentials = new NetworkCredential(Configuration["Mail:Credentials:Username"], Configuration["Mail:Credentials:Password"]),
         };
-
-        MailAddress from = new("a@a.com", "AsM");
-        MailAddress to = new(_model.Email, _model.Username);
         
+        MailAddress from = new(Configuration["Mail:Address"]!, Configuration["Mail:Name"]);
+        MailAddress to = new(_model.Email, _model.Displayname);
         
         
         MailMessage message = new MailMessage(from, to)
         {
-            Subject = "X",
+            Subject = "Confirm Your AsM Account",
             SubjectEncoding = Encoding.UTF8,
             
-            Body = "Y",
+            Body = $"{code}",
             BodyEncoding = Encoding.UTF8,
             
             HeadersEncoding = Encoding.UTF8,
@@ -175,8 +190,23 @@
 
         try
         {
-            client.Send(message);
+            var cluster = Cluster.Builder().AddContactPoint(Environment.GetEnvironmentVariable("IS_DOCKER") == "true" ? "cassandra" : "localhost").Build();
+            var session = await cluster.ConnectAsync("accounts");
 
+            try
+            {
+                var statement = await session.PrepareAsync("INSERT INTO accounts.email_verification (id, email) VALUES (?, ?)");
+                await session.ExecuteAsync(statement.Bind(code, email));
+
+                // TODO: Sign user in
+            }
+            finally
+            {
+                await session.ShutdownAsync();
+                await cluster.ShutdownAsync();
+            }
+
+            client.Send(message);
         }
         catch (Exception e)
         {
