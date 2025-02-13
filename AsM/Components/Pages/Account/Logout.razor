@@ -1,0 +1,14 @@
+@page "/Account/Logout"
+
+@inject IJSRuntime JsRuntime
+
+<MudIconButton ButtonType="ButtonType.Button" Color="Color.Error" OnClick="SignOut" Icon="@Icons.Material.TwoTone.Logout">Sign out</MudIconButton>
+
+@code {
+
+    private async Task SignOut()
+    {
+        var authModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", "./auth.js");
+        await authModule.InvokeVoidAsync("SignOut",  "/");
+    }
+}

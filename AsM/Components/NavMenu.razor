@@ -3,10 +3,13 @@
     <MudDivider />
         <AuthorizeView>
             <NotAuthorized>
-                <MudNavLink Href="/Account/Signup" Match="NavLinkMatch.All" Icon="@Icons.Material.TwoTone.Login"><MudText Style="overflow: hidden; white-space: nowrap;">Sign up</MudText></MudNavLink>
+                <MudNavLink Href="/Account/Signin" Match="NavLinkMatch.All" Icon="@Icons.Material.TwoTone.Login"><MudText Style="overflow: hidden; white-space: nowrap;">Sign in</MudText></MudNavLink>
             </NotAuthorized>
             <Authorized>
-                <MudNavLink Href="/Profile" Match="NavLinkMatch.All" Icon="@Icons.Material.TwoTone.AccountBox">Profile</MudNavLink>
+                <MudNavLink Href="/Account/Profile" Match="NavLinkMatch.All" Icon="@Icons.Material.TwoTone.AccountBox">Profile</MudNavLink>
+            </Authorized>
+            <Authorized>
+                <MudNavLink Href="/Account/Logout" Match="NavLinkMatch.All" Icon="@Icons.Material.TwoTone.Logout" IconColor="Color.Error">Log out</MudNavLink>
             </Authorized>
         </AuthorizeView>
 </MudNavMenu>

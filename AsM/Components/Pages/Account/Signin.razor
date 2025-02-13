@@ -1,53 +1,80 @@
-@page "/Account/Signup"
+@page "/Account/Signin"
 
 @using System.Net
 @using System.Net.Mail
-@using System.Security.Claims
 @using System.Security.Cryptography
 @using System.Text
 @using System.Text.RegularExpressions
 @using Cassandra
 @using FluentValidation
-@using Microsoft.AspNetCore.Authentication
-@using Microsoft.AspNetCore.Authentication.Cookies
 
 @inject IDialogService DialogService
 @inject IConfiguration Configuration
-@inject IHttpContextAccessor Context
+@inject IJSRuntime JsRuntime
+@inject NavigationManager Navigation
 
-<PageTitle>Sign up to AsM</PageTitle>
+<AuthorizeView>
+    <Authorized>
+    @{
+        Navigation.NavigateTo("/");
+    }
+    </Authorized>
+</AuthorizeView>
 
-<MudButton OnClick="@(async () => await OpenEmailDialog())" Variant="Variant.Filled" Color="Color.Primary" />
-
-<MudGrid Style="overflow: hidden !important; height: 100%; width: 100%;">
-    <MudItem Class="d-flex align-center justify-center mud-width-full mt-14" xs="12">
-        <MudForm Model="@_model" @ref="@_form" style="width: 50%;" Validation="@(_validator.ValidateValue)" ValidationDelay="0">
+<MudTabs Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6" Style="width: 100%;" Centered="true">
+    <MudTabPanel Text="Sign in">
+        <PageTitle> Sign in to AsM</PageTitle>
+        
+            <MudForm Model="@_signinForm" @ref="@_signinForm" Style="width: 50%; margin: auto;">
+                <MudCard>
+                    <MudCardHeader>Enter your credentials to sign in</MudCardHeader>
+                    <MudCardContent>
+                        <!-- TODO: Allow both username and email sign in (check for at-symbol in Account) -->
+                        <MudTextField Label="Username/Email" @bind-Value="_signinModel.Account" For="@(() => _signinModel.Account)"/>
+                        <MudTextField Label="Password" @bind-Value="_signinModel.Password" For="@(() => _signinModel.Password)" InputType="InputType.Password"/>
+                    </MudCardContent>
+                    <MudCardActions>
+                        <MudButton Variant="Variant.Filled" OnClick="@(async () => await SignIn())" Color="Color.Primary" Class="ml-auto">Sign in</MudButton>
+                    </MudCardActions>
+                </MudCard>
+            </MudForm>
+    </MudTabPanel>
+    <MudTabPanel Text="Sign up">
+        <PageTitle>Sign up to AsM</PageTitle>
+        
+        <MudForm Model="@_signupModel" @ref="@_signupForm" Style="width: 50%; margin: auto;" Validation="@(_signupValidator.ValidateValue)" ValidationDelay="0">
             <MudCard>
+                <MudCardHeader>Enter your credentials to sign in</MudCardHeader>
                 <MudCardContent>
-                    <MudTextField Label="Display name" HelperText="Max. 32 characters" MaxLength="32" @bind-Value="_model.Displayname" For="@(() => _model.Displayname)" Immediate="true" />
-                    <MudTextField Label="Username" HelperText="Max. 16 characters" MaxLength="16" @bind-Value="_model.Username" For="@(() => _model.Username)" Immediate="true" />
-                    <MudTextField Label="Email" Class="mt-3" @bind-Value="_model.Email" For="@(() => _model.Email)" Immediate="false" />
-                    <MudTextField Label="Password" Class="mt-3" HelperText="Choose a strong password" InputType="InputType.Password" @bind-Value="_model.Password" For="@(() => _model.Password)" Immediate="true" />
-                    <MudTextField Label="Repeat password" Class="mt-3" HelperText="Repeat the password" InputType="InputType.Password" @bind-Value="_model.PasswordRepeat" For="@(() => _model.PasswordRepeat)" Immediate="true" />
+                    <MudTextField Label="Display name" HelperText="Max. 32 characters" MaxLength="32" @bind-Value="_signupModel.Displayname" For="@(() => _signupModel.Displayname)" Immediate="true"/>
+                    <MudTextField Label="Username" HelperText="Max. 16 characters" MaxLength="16" @bind-Value="_signupModel.Username" For="@(() => _signupModel.Username)" Immediate="true"/>
+                    <MudTextField Label="Email" Class="mt-3" @bind-Value="_signupModel.Email" For="@(() => _signupModel.Email)" Immediate="false"/>
+                    <MudTextField Label="Password" Class="mt-3" HelperText="Choose a strong password" InputType="InputType.Password" @bind-Value="_signupModel.Password" For="@(() => _signupModel.Password)" Immediate="true"/>
+                    <MudTextField Label="Repeat password" Class="mt-3" HelperText="Repeat the password" InputType="InputType.Password" @bind-Value="_signupModel.PasswordRepeat" For="@(() => _signupModel.PasswordRepeat)" Immediate="true"/>
                 </MudCardContent>
                 <MudCardActions>
-                    <MudButton Variant="Variant.Filled" OnClick="@(async () => await Submit())" Color="Color.Primary" Class="ml-auto">Sign up</MudButton>
+                    <MudButton Variant="Variant.Filled" OnClick="@(async () => await SignUp())" Color="Color.Primary" Class="ml-auto">Sign up</MudButton>
                 </MudCardActions>
             </MudCard>
         </MudForm>
-    </MudItem>
-</MudGrid>
+    </MudTabPanel>
+</MudTabs>
 
 @code
 {
-    MudForm _form = null!;
+    [CascadingParameter] public HttpContext Context { get; set; } = default!;
 
-    readonly ModelValidator _validator = new();
-    readonly SignupForm _model = new();
+    MudForm _signinForm = null!;
+    MudForm _signupForm = null!;
+
+    readonly SignUpModelValidator _signupValidator = new();
+
+    readonly SigninForm _signinModel = new();
+    readonly SignupForm _signupModel = new();
     
-    public class ModelValidator : AbstractValidator<SignupForm>
+    public class SignUpModelValidator : AbstractValidator<SignupForm>
     {
-        public ModelValidator()
+        public SignUpModelValidator()
         {
             RuleFor(x => x.Displayname).Cascade(CascadeMode.Stop).NotEmpty().MaximumLength(32).WithMessage("Displayname can not be longer than 32 characters.");
             RuleFor(x => x.Email).Cascade(CascadeMode.Stop).NotEmpty().EmailAddress().MustAsync(async (v, _) => await CheckEmail(v)).WithMessage("Email address is already used.");
@@ -126,6 +153,12 @@
         
         public string PasswordRepeat { get; set; } = string.Empty;
     }
+    
+    public class SigninForm
+    {
+        public string Account { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+    }
 
     private Task OpenEmailDialog()
     {
@@ -133,22 +166,31 @@
 
         var p = new DialogParameters<EmailDialog>()
         {
-            { x => x.Address, _model.Email },
+            { x => x.Address, _signupModel.Email },
+            { x => x.Id, _signupModel.Id }
         };
         return DialogService.ShowAsync<EmailDialog>("Confirm email address", p ,options);
     }
 
-    private async Task Submit()
+    private async Task SignIn()
     {
-        await _form.Validate();
+        var authModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", "./auth.js");
+        await authModule.InvokeVoidAsync("SignIn", _signinModel.Account, _signinModel.Account, _signinModel.Password, "/");
+    }
+    
+    private async Task SignUp()
+    {
+        await _signupForm.Validate();
         
-        if (_form.IsValid)
+        if (_signupForm.IsValid)
         {
-            _model.Username = _model.Username.ToLower();
-            await DbHelper.CreateUser(_model);
-            await DbHelper.InsertPassword(_model.Id, _model.Password);
-            StateHasChanged();
-            await SendEmail(_model.Email);
+            _signupModel.Username = _signupModel.Username.ToLower();
+            await DbHelper.CreateUser(_signupModel);
+            await DbHelper.InsertPassword(_signupModel.Id, _signupModel.Password);
+            await SendEmail(_signupModel.Email);
+
+            var authModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", "./auth.js");
+            await authModule.InvokeVoidAsync("SignIn", _signupModel.Username, _signupModel.Email, _signupModel.Password, false);
             await OpenEmailDialog();
         }
     }
@@ -162,7 +204,6 @@
         
         SmtpClient client = new SmtpClient()
         {
-            // TODO: Extract
             UseDefaultCredentials = true,
             Host = Configuration["Mail:Host"]!,
             Port = int.Parse(Configuration["Mail:Port"]!),
@@ -171,7 +212,7 @@
         };
         
         MailAddress from = new(Configuration["Mail:Address"]!, Configuration["Mail:Name"]);
-        MailAddress to = new(_model.Email, _model.Displayname);
+        MailAddress to = new(_signupModel.Email, _signupModel.Displayname);
         
         
         MailMessage message = new MailMessage(from, to)
@@ -197,8 +238,6 @@
             {
                 var statement = await session.PrepareAsync("INSERT INTO accounts.email_verification (id, email) VALUES (?, ?)");
                 await session.ExecuteAsync(statement.Bind(code, email));
-
-                // TODO: Sign user in
             }
             finally
             {

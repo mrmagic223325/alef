@@ -1,6 +1,9 @@
 @using AsM.Models
 @using Cassandra
 
+@inject NavigationManager Navigation
+@inject GraphService Graph
+
 <MudDialog>
     <TitleContent>
         Confirm Email address
@@ -26,15 +29,15 @@
 
     
     private void Resend()
-    {}
+    {
+        throw new NotImplementedException();
+    }
     
     
-    // TODO: Only allow close after Email actually confirmed
     private async Task Submit()
     {
         if (Code.Length == 8)
         {
-            // TODO: Check if code matches email
             var cluster = Cluster.Builder().AddContactPoint(Environment.GetEnvironmentVariable("IS_DOCKER") == "true" ? "cassandra" : "localhost").Build();
 
             var session = await cluster.ConnectAsync("accounts");
@@ -51,7 +54,21 @@
                 {
                     statement = await session.PrepareAsync("DELETE FROM email_verification WHERE email = ?");
                     await session.ExecuteAsync(statement.Bind(Address));
+                    var gs = Graph.Driver.AsyncSession();
+
+                    // TODO: Error Handling
+                    await Graph.Driver.VerifyConnectivityAsync();
+
+                    // TODO: Error Handling
+                    await gs.ExecuteWriteAsync(async tx =>
+                    {
+                        var r = await tx.RunAsync(
+                            "CREATE (u:User { id: $id })", new { id = Id.ToString() });
+                    });
+                    
+                    
                     MudDialog.Close(DialogResult.Ok(true));
+                    Navigation.NavigateTo("/", forceLoad: true);
                 }
             }
             finally
@@ -63,5 +80,7 @@
     }
     
     [Parameter]
-    public string Address { get; set; }
+    public required string Address { get; set; }
+    [Parameter]
+    public Guid Id { get; set; }
 }

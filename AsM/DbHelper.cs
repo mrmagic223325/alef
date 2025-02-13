@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using AsM.Components.Pages.Account;
 using AsM.Models;
 using Cassandra;
+using ISession = Cassandra.ISession;
 
 namespace AsM;
 
@@ -11,9 +12,51 @@ public class DatabaseService
 }
 
 
-public static class DbHelper
+public class DbHelper
 {
+    public static async Task<(Cluster, ISession)> Connect(string keyspace)
+    {
+        var cluster = Cluster.Builder().AddContactPoint(Environment.GetEnvironmentVariable("IS_DOCKER") == "true" ? "cassandra" : "localhost").Build();
+        var session = await cluster.ConnectAsync(keyspace);
 
+        return (cluster, session);
+    }
+
+    // TODO: Error Handling
+    public static async Task<bool> CheckPassword(Guid id, string password)
+    {
+        var (cluster, session) = await Connect("accounts");
+        
+        var st = await session.PrepareAsync("SELECT hash FROM credentials WHERE id = ?");
+
+        var res = await session.ExecuteAsync(st.Bind(id));
+
+        var hash = res.FirstOrDefault()?.GetValue<string>("hash");
+        
+        byte[] hashBytes = Convert.FromBase64String(hash);
+        
+        // Get the salt
+        byte[] salt = new byte[16];
+        Array.Copy(hashBytes, 0, salt, 0, 16);
+
+        // Create the Rfc2898DeriveBytes instance with the same salt and iterations
+        var pbkdf2 = new Rfc2898DeriveBytes(password, salt, 10000, HashAlgorithmName.SHA512);
+        
+        // Get the hash of the input password
+        byte[] h = pbkdf2.GetBytes(20);
+
+        // Compare the results
+        for (int i = 0; i < 20; i++)
+        {
+            if (hashBytes[i + 16] != h[i])
+            {
+                return false;
+            }
+        }
+        return true;
+
+    }
+    
     // TODO: Error Handling
     public static async Task<bool> InsertPassword(Guid id, string password)
     {
@@ -51,7 +94,7 @@ public static class DbHelper
     }
     
     
-    public static async Task<bool> CreateUser(Signup.SignupForm form)
+    public static async Task<bool> CreateUser(Signin.SignupForm form)
     {
         var cluster = Cluster.Builder().AddContactPoint(Environment.GetEnvironmentVariable("IS_DOCKER") == "true" ? "cassandra" : "localhost").Build();
         var session = await cluster.ConnectAsync("accounts");

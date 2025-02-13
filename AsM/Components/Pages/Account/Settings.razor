@@ -1,0 +1,112 @@
+@page "/Settings"
+@using AsM.Models
+@using Cassandra.Mapping
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.Extensions.Caching.Memory
+
+@attribute [Authorize]
+
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IJSRuntime JsRuntime
+@inject IMemoryCache _cache
+@inject ISnackbar Snackbar
+
+<MudGrid Justify="Justify.Center">
+    <MudItem>
+        <MudContainer Style="display: flex; flex-direction: row;">
+            <style>
+                /* Don't overflow placeholder text in below MudTextField */
+                input:placeholder-shown {
+                    text-overflow: ellipsis !important;
+                }
+            </style>
+            <MudTextField Label="Change display name" Variant="Variant.Outlined" @bind-Value="Displayname" Counter="32" MaxLength="32" Immediate="true" Validation="@(new Func<string, IEnumerable<string>>(MaxCharacters))" Adornment="Adornment.End" AdornmentIcon="@Icons.Material.TwoTone.Save" OnAdornmentClick="@(() => SaveDisplayname())" Placeholder="@Placeholder" TextUpdateSuppression="false" OnKeyDown="@CheckEnter"/>
+        </MudContainer>
+    </MudItem>
+</MudGrid>
+
+@code
+{
+    private async Task CheckEnter(KeyboardEventArgs ev)
+    {
+        if (ev.Key == "Enter")
+            await SaveDisplayname();
+    }
+    
+    private static IEnumerable<string> MaxCharacters(string s)
+    {
+        if (!string.IsNullOrEmpty(s) && 32 < s.Length)
+            yield return "Max 25 characters";
+    }
+
+    class UserData
+    {
+        public string Displayname { get; set; }
+    }
+
+    protected override async void OnInitialized()
+    {
+        await base.OnInitializedAsync();
+        if (_cache.TryGetValue($"user-{Guid.Parse(AuthStateProvider.GetAuthenticationStateAsync().Result.User.FindFirst("Guid").Value)}", out UserData user))
+        {
+            Console.WriteLine("Hit");
+            Placeholder = user.Displayname;
+            StateHasChanged();
+        }
+        else
+        {
+            Console.WriteLine("Miss");
+            // Store User data in cache
+            var (cluster, session) = await DbHelper.Connect("accounts");
+            IMapper mapper = new Mapper(session);
+
+            var u = await mapper.SingleAsync<User>("SELECT * FROM users WHERE id = ?", Guid.Parse(AuthStateProvider.GetAuthenticationStateAsync().Result.User.FindFirst("Guid").Value));
+            
+            var data = new UserData
+            {
+                Displayname = u.Displayname
+            };
+            
+            _cache.Set($"user-{Guid.Parse(AuthStateProvider.GetAuthenticationStateAsync().Result.User.FindFirst("Guid").Value)}", data, TimeSpan.FromMinutes(10));
+        }
+    }
+
+    public string Displayname { get; set; }
+    public string Placeholder { get; set; }
+
+    private async Task SaveDisplayname()
+    {
+        if (Displayname.Length > 32)
+        {
+            return;
+        }
+
+        // Saving displayname in claims is bad idea. Use database instead then ig
+        
+        var (cluster, session) = await DbHelper.Connect("accounts");
+        
+        var authModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", "./changesettings.js");
+        
+        await authModule.InvokeVoidAsync("ChangeSettings", "Displayname", Displayname);
+        
+        Displayname = "";
+        
+        IMapper mapper = new Mapper(session);
+        Placeholder = (await mapper.SingleAsync<User>("SELECT * FROM users WHERE id = ?", Guid.Parse(AuthStateProvider.GetAuthenticationStateAsync().Result.User.FindFirst("Guid").Value))).Displayname;
+        _cache.Set($"user-{Guid.Parse(AuthStateProvider.GetAuthenticationStateAsync().Result.User.FindFirst("Guid").Value)}", new UserData() { Displayname = Placeholder }, TimeSpan.FromMinutes(10));
+        StateHasChanged();
+
+        Snackbar.Add("Successfully changed displayname", Severity.Success, configure: options =>
+        {
+            options.Icon = Icons.Material.TwoTone.CheckCircle;
+            options.DuplicatesBehavior = SnackbarDuplicatesBehavior.Prevent;
+            options.OnClick = snackbar =>
+            {
+                snackbar.ForceClose();
+                return Task.CompletedTask;
+            };
+            options.ShowTransitionDuration = 100;
+            options.MaximumOpacity = 100;
+        });
+    }
+}

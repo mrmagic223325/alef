@@ -20,4 +20,7 @@ public class User
     
     [Column("username")]
     public string Username { get; set; }
+    
+    [Column("displayname")]
+    public string Displayname { get; set; }
 }
