@@ -7,6 +7,13 @@ namespace AsM.Api;
 [ApiController]
 public class ChangeSettings : ControllerBase
 {
+    private readonly DatabaseService _databaseService;
+    
+    public ChangeSettings(DatabaseService databaseService)
+    {
+        _databaseService = databaseService;
+    }
+    
     private static readonly AuthenticationProperties Properties = new()
     {
         ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(10),
@@ -20,7 +27,7 @@ public class ChangeSettings : ControllerBase
     public async Task<ActionResult> ChangeSettingsPost(ChangeSettingsData value)
     {
 
-        var (cluster, session) = await DbHelper.Connect("accounts");
+        var (cluster, session) = await _databaseService.Connect("accounts");
 
         var st = await session.PrepareAsync("UPDATE users SET displayname = ? WHERE id = ?");
 

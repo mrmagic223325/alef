@@ -8,7 +8,7 @@ namespace AsM.Models;
 public class Verification
 {
     [Column("email")]
-    public required string Email { get; set; }
+    public string? Email { get; set; }
 
     [Column("id")]
     public Guid Id { get; set; }

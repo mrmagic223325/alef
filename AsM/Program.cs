@@ -1,13 +1,13 @@
 using AsM;
 using AsM.Components;
-using Cassandra;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.AspNetCore.Identity;
 using MudBlazor.Services;
-using Neo4j.Driver;
+using Serilog;
+
+Log.Logger = new LoggerConfiguration().WriteTo.Console().CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+
 
 builder.Services.AddScoped<DatabaseService>();
 builder.Services.AddScoped<GraphService>();
@@ -23,7 +23,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     options.Cookie.IsEssential = true;
     options.Cookie.SameSite = SameSiteMode.Strict;
     options.LoginPath = "/Account/Signin";
-    options.LogoutPath = "/Account/Logout";
+    options.LogoutPath = "/Account/Signout";
     options.SlidingExpiration = true;
     options.AccessDeniedPath = "/Error";
 });

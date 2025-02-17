@@ -7,58 +7,85 @@ using ISession = Cassandra.ISession;
 namespace AsM;
 
 public class DatabaseService
-{
+{ 
+    private static IConfiguration _configuration;
     public Cluster Cluster { get; set; } = Cluster.Builder().AddContactPoint(Environment.GetEnvironmentVariable("IS_DOCKER") == "true" ? "cassandra" : "localhost").Build();
-}
 
-
-public class DbHelper
-{
-    public static async Task<(Cluster, ISession)> Connect(string keyspace)
+    public DatabaseService(IConfiguration configuration)
     {
-        var cluster = Cluster.Builder().AddContactPoint(Environment.GetEnvironmentVariable("IS_DOCKER") == "true" ? "cassandra" : "localhost").Build();
+        _configuration = configuration;
+    }
+    
+    public async Task<(Cluster?, ISession?)> Connect(string keyspace)
+    {
+        var cluster = Cluster.Builder()
+            .AddContactPoint(Environment.GetEnvironmentVariable("IS_DOCKER") == "true"
+                ? _configuration["Cassandra:ProdUrl"]
+                : _configuration["Cassandra:LocalUrl"])
+            .Build();
         var session = await cluster.ConnectAsync(keyspace);
 
         return (cluster, session);
     }
-
+    
     // TODO: Error Handling
-    public static async Task<bool> CheckPassword(Guid id, string password)
+    public async Task<bool> CheckPassword(Guid id, string password)
     {
-        var (cluster, session) = await Connect("accounts");
-        
-        var st = await session.PrepareAsync("SELECT hash FROM credentials WHERE id = ?");
-
-        var res = await session.ExecuteAsync(st.Bind(id));
-
-        var hash = res.FirstOrDefault()?.GetValue<string>("hash");
-        
-        byte[] hashBytes = Convert.FromBase64String(hash);
-        
-        // Get the salt
-        byte[] salt = new byte[16];
-        Array.Copy(hashBytes, 0, salt, 0, 16);
-
-        // Create the Rfc2898DeriveBytes instance with the same salt and iterations
-        var pbkdf2 = new Rfc2898DeriveBytes(password, salt, 10000, HashAlgorithmName.SHA512);
-        
-        // Get the hash of the input password
-        byte[] h = pbkdf2.GetBytes(20);
-
-        // Compare the results
-        for (int i = 0; i < 20; i++)
+        try
         {
-            if (hashBytes[i + 16] != h[i])
+            var (_, session) = await Connect("accounts");
+
+            if (session is null)
             {
-                return false;
+                throw new NullReferenceException();
             }
+
+            var st = await session.PrepareAsync("SELECT hash FROM credentials WHERE id = ?");
+
+
+            var res = await session.ExecuteAsync(st.Bind(id));
+
+
+            var hash = res.FirstOrDefault()?.GetValue<string>("hash");
+
+
+            byte[] hashBytes = Convert.FromBase64String(hash);
+            
+            // Get the salt
+            byte[] salt = new byte[16];
+            Array.Copy(hashBytes, 0, salt, 0, 16);
+
+            // Create the Rfc2898DeriveBytes instance with the same salt and iterations
+            var pbkdf2 = new Rfc2898DeriveBytes(password, salt, 10000, HashAlgorithmName.SHA512);
+
+            // Get the hash of the input password
+            byte[] h = pbkdf2.GetBytes(20);
+
+            // Compare the results
+            for (int i = 0; i < 20; i++)
+            {
+                if (hashBytes[i + 16] != h[i])
+                {
+                    return false;
+                }
+            }
+        }
+        catch (NoHostAvailableException e)
+        {
+            Console.WriteLine(e.Message);
+            Environment.Exit(1);
+        }
+        catch (ArgumentException e)
+        {
+            Console.WriteLine(e.Message);
+            Environment.Exit(1);
         }
         return true;
 
     }
     
     // TODO: Error Handling
-    public static async Task<bool> InsertPassword(Guid id, string password)
+    public async Task<bool> InsertPassword(Guid id, string password)
     {
         var cluster = Cluster.Builder().AddContactPoint(Environment.GetEnvironmentVariable("IS_DOCKER") == "true" ? "cassandra" : "localhost").Build();
         var session = await cluster.ConnectAsync("accounts");
@@ -94,7 +121,7 @@ public class DbHelper
     }
     
     
-    public static async Task<bool> CreateUser(Signin.SignupForm form)
+    public async Task<bool> CreateUser(Signin.SignupForm form)
     {
         var cluster = Cluster.Builder().AddContactPoint(Environment.GetEnvironmentVariable("IS_DOCKER") == "true" ? "cassandra" : "localhost").Build();
         var session = await cluster.ConnectAsync("accounts");
@@ -112,7 +139,7 @@ public class DbHelper
         return true;
     }
 
-    public static async Task<User?> GetUser(Guid id)
+    public async Task<User?> GetUser(Guid id)
     {
         // If running in Docker, use cassandra as hostname, otherwise localhost
         var cluster = Cluster.Builder()
@@ -144,7 +171,7 @@ public class DbHelper
         }
     }
 
-    public static async Task<List<User>?> GetUsers()
+    public async Task<List<User>?> GetUsers()
     {
         var cluster = Cluster.Builder().AddContactPoint(Environment.GetEnvironmentVariable("IS_DOCKER") == "true" ? "cassandra" : "localhost").Build();
 

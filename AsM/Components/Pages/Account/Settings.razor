@@ -1,4 +1,4 @@
-@page "/Settings"
+@page "/Account/Settings"
 @using AsM.Models
 @using Cassandra.Mapping
 @using Microsoft.AspNetCore.Authorization
@@ -8,8 +8,9 @@
 
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IJSRuntime JsRuntime
-@inject IMemoryCache _cache
+@inject IMemoryCache Cache
 @inject ISnackbar Snackbar
+@inject DatabaseService DB
 
 <MudGrid Justify="Justify.Center">
     <MudItem>
@@ -47,7 +48,7 @@
     protected override async void OnInitialized()
     {
         await base.OnInitializedAsync();
-        if (_cache.TryGetValue($"user-{Guid.Parse(AuthStateProvider.GetAuthenticationStateAsync().Result.User.FindFirst("Guid").Value)}", out UserData user))
+        if (Cache.TryGetValue($"user-{Guid.Parse(AuthStateProvider.GetAuthenticationStateAsync().Result.User.FindFirst("Guid").Value)}", out UserData user))
         {
             Console.WriteLine("Hit");
             Placeholder = user.Displayname;
@@ -57,7 +58,7 @@
         {
             Console.WriteLine("Miss");
             // Store User data in cache
-            var (cluster, session) = await DbHelper.Connect("accounts");
+            var (cluster, session) = await DB.Connect("accounts");
             IMapper mapper = new Mapper(session);
 
             var u = await mapper.SingleAsync<User>("SELECT * FROM users WHERE id = ?", Guid.Parse(AuthStateProvider.GetAuthenticationStateAsync().Result.User.FindFirst("Guid").Value));
@@ -67,7 +68,7 @@
                 Displayname = u.Displayname
             };
             
-            _cache.Set($"user-{Guid.Parse(AuthStateProvider.GetAuthenticationStateAsync().Result.User.FindFirst("Guid").Value)}", data, TimeSpan.FromMinutes(10));
+            Cache.Set($"user-{Guid.Parse(AuthStateProvider.GetAuthenticationStateAsync().Result.User.FindFirst("Guid").Value)}", data, TimeSpan.FromMinutes(10));
         }
     }
 
@@ -82,8 +83,7 @@
         }
 
         // Saving displayname in claims is bad idea. Use database instead then ig
-        
-        var (cluster, session) = await DbHelper.Connect("accounts");
+        var (cluster, session) = await DB.Connect("accounts");
         
         var authModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", "./changesettings.js");
         
@@ -93,7 +93,7 @@
         
         IMapper mapper = new Mapper(session);
         Placeholder = (await mapper.SingleAsync<User>("SELECT * FROM users WHERE id = ?", Guid.Parse(AuthStateProvider.GetAuthenticationStateAsync().Result.User.FindFirst("Guid").Value))).Displayname;
-        _cache.Set($"user-{Guid.Parse(AuthStateProvider.GetAuthenticationStateAsync().Result.User.FindFirst("Guid").Value)}", new UserData() { Displayname = Placeholder }, TimeSpan.FromMinutes(10));
+        Cache.Set($"user-{Guid.Parse(AuthStateProvider.GetAuthenticationStateAsync().Result.User.FindFirst("Guid").Value)}", new UserData() { Displayname = Placeholder }, TimeSpan.FromMinutes(10));
         StateHasChanged();
 
         Snackbar.Add("Successfully changed displayname", Severity.Success, configure: options =>

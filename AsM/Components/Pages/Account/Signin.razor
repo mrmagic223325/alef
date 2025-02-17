@@ -12,6 +12,7 @@
 @inject IConfiguration Configuration
 @inject IJSRuntime JsRuntime
 @inject NavigationManager Navigation
+@inject DatabaseService DB
 
 <AuthorizeView>
     <Authorized>
@@ -31,7 +32,7 @@
                     <MudCardContent>
                         <!-- TODO: Allow both username and email sign in (check for at-symbol in Account) -->
                         <MudTextField Label="Username/Email" @bind-Value="_signinModel.Account" For="@(() => _signinModel.Account)"/>
-                        <MudTextField Label="Password" @bind-Value="_signinModel.Password" For="@(() => _signinModel.Password)" InputType="InputType.Password"/>
+                        <MudTextField Label="Password" @bind-Value="_signinModel.Password" For="@(() => _signinModel.Password)" InputType="InputType.Password" TextUpdateSuppression="false" OnKeyDown="CheckEnter"/>
                     </MudCardContent>
                     <MudCardActions>
                         <MudButton Variant="Variant.Filled" OnClick="@(async () => await SignIn())" Color="Color.Primary" Class="ml-auto">Sign in</MudButton>
@@ -71,6 +72,12 @@
 
     readonly SigninForm _signinModel = new();
     readonly SignupForm _signupModel = new();
+    
+    private async Task CheckEnter(KeyboardEventArgs ev)
+    {
+        if (ev.Key == "Enter")
+            await SignIn();
+    }
     
     public class SignUpModelValidator : AbstractValidator<SignupForm>
     {
@@ -174,8 +181,17 @@
 
     private async Task SignIn()
     {
+        var d = DotNetObjectReference.Create(this);
         var authModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", "./auth.js");
-        await authModule.InvokeVoidAsync("SignIn", _signinModel.Account, _signinModel.Account, _signinModel.Password, "/");
+        await authModule.InvokeVoidAsync("SignIn", d, _signinModel.Account, _signinModel.Account, _signinModel.Password, "/");
+    }
+
+    [JSInvokable]
+    public void ValidationErrors(string json)
+    {
+        Console.WriteLine(json);
+        if (string.IsNullOrEmpty(json))
+            Navigation.NavigateTo("/");
     }
     
     private async Task SignUp()
@@ -185,8 +201,8 @@
         if (_signupForm.IsValid)
         {
             _signupModel.Username = _signupModel.Username.ToLower();
-            await DbHelper.CreateUser(_signupModel);
-            await DbHelper.InsertPassword(_signupModel.Id, _signupModel.Password);
+            await DB.CreateUser(_signupModel);
+            await DB.InsertPassword(_signupModel.Id, _signupModel.Password);
             await SendEmail(_signupModel.Email);
 
             var authModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", "./auth.js");

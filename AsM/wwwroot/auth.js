@@ -1,4 +1,4 @@
-export function SignIn(username, email, password, redirect)
+export function SignIn(dotnet, username, email, password, redirect)
 {
     var url = "/api/auth/signin";
     var xhr = new XMLHttpRequest();
@@ -7,15 +7,15 @@ export function SignIn(username, email, password, redirect)
     xhr.setRequestHeader("Accept", "application/json");
     xhr.setRequestHeader("Content-Type", "application/json");
     
-    xhr.onreadystatechange = function ()
-    {
-        if (xhr.readyState === 4)
+    xhr.onload = function () {
+        if (xhr.status === 200)
         {
-            console.log("Call '" + url + "'. Status " + xhr.status);
-            if (redirect)
-                location.replace(redirect);
+            dotnet.invokeMethodAsync('ValidationErrors', "");
+        } else if (xhr.status === 400)
+        {
+            dotnet.invokeMethodAsync('ValidationErrors', xhr.responseText);
         }
-    }
+    };
     
     var data = {
         email: email,

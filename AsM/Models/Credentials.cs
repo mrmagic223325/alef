@@ -11,8 +11,5 @@ public class Credentials
     public Guid Id { get; set; }
     
     [Column("hash")]
-    public required string Hash { get; set; }
-    
-    [Column("salt")]
-    public required string Salt { get; set; }
+    public string? Hash { get; set; }
 }

@@ -4,6 +4,8 @@ using Cassandra.Mapping;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
+using Newtonsoft.Json;
+using JsonSerializer = System.Text.Json.JsonSerializer;
 
 namespace AsM.Api;
 
@@ -11,7 +13,15 @@ namespace AsM.Api;
 [ApiController]
 public class AuthController : ControllerBase
 {
-    private static readonly AuthenticationProperties Properties = new()
+
+    private readonly DatabaseService _databaseService;
+    
+    public AuthController(DatabaseService databaseService)
+    {
+        _databaseService = databaseService;
+    }
+    
+    private readonly AuthenticationProperties Properties = new()
     {
         AllowRefresh = true,
         ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(10),
@@ -22,10 +32,9 @@ public class AuthController : ControllerBase
     // TODO: Rework queries
     [HttpPost]
     [Route("api/auth/signin")]
-    public async Task<ActionResult> SignInPost(SignInData value)
+    public async Task<IActionResult> SignInPost(SignInData value)
     {
-
-        var (cluster, session) = await DbHelper.Connect("accounts");
+        var (cluster, session) = await _databaseService.Connect("accounts");
 
         // Determine whether username or email is given and query the database accordingly
         var q = value.Username.Contains("@") ? "email" : "username";
@@ -35,16 +44,22 @@ public class AuthController : ControllerBase
         var res = await session.ExecuteAsync(st.Bind(value.Username));
 
         var id = res.FirstOrDefault().GetValue<Guid>("id");
+        
+        var r = await _databaseService.CheckPassword(id, value.Password);
 
-        var r = await DbHelper.CheckPassword(id, value.Password);
-
+        var v = new ValidationProblemDetails(new Dictionary<string, string[]>()
+        {
+            { "Password", new[] { "Password incorrect." }}
+        });
+        
         if (r == false)
-            this.ValidationProblem();
+            return BadRequest(v);
 
         try
         {
             MappingConfiguration.Global.Define(new Map<User>().TableName("users").PartitionKey(u => u.Id));
         }
+        // TODO: Exception Handling
         catch (Exception e)
         {
             ;
@@ -82,7 +97,7 @@ public class AuthController : ControllerBase
         await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity),
             p);
 
-        return this.Ok();
+        return Ok(new { Success = true });
     }
 
     [HttpPost]
