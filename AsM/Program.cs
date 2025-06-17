@@ -1,5 +1,9 @@
-using AsM;
 using AsM.Components;
+using AsM.Data;
+using AsM.Interfaces;
+using AsM.Models;
+using AsM.Services;
+using Cassandra.Mapping;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using MudBlazor.Services;
 using Serilog;
@@ -8,13 +12,16 @@ Log.Logger = new LoggerConfiguration().WriteTo.Console().CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Register data contexts
+builder.Services.AddScoped<ICassandraDbContext, CassandraDbContext>();
+builder.Services.AddScoped<INeo4jDbContext, Neo4jDbContext>();
 
-builder.Services.AddScoped<DatabaseService>();
-builder.Services.AddScoped<GraphService>();
+// Register services
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
 
 builder.Services.AddControllers();
-
-builder.Services.AddMemoryCache();
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(options =>
 {
@@ -56,7 +63,24 @@ app.UseAntiforgery();
 app.MapControllers();
 
 app.MapStaticAssets();
-app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
+app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 
-app.Run();
+MappingConfiguration.Global.Define(new Map<User>().TableName("users").PartitionKey(u => u.Id));
+
+
+try
+{
+    app.Run();
+}
+catch (Exception e)
+{
+    if (e.Message == "Unrecoverable")
+    {
+        Log.Fatal("Unrecoverable error. Exiting."); 
+        Environment.Exit(1);
+    }
+}
+finally
+{
+    await Log.CloseAndFlushAsync();
+}

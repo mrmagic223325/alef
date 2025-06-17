@@ -1,1 +1,98 @@
-@page "/Account"
+@page "/{Username}"
+@using AsM.Interfaces
+@using Serilog
+
+@inject ICassandraDbContext Db
+
+
+@if (_isLoading)
+{
+    <MudGrid Class="d-flex justify-center mt-16">
+        <MudProgressCircular Color="Color.Default" Indeterminate="true"/>
+    </MudGrid>
+}
+else if (!string.IsNullOrEmpty(_errorMessage))
+{
+    <MudGrid Class="d-flex justify-center mt-16">
+        <MudAlert Severity="Severity.Error">@_errorMessage</MudAlert>
+    </MudGrid>
+}
+else
+{
+    <MudCard Elevation="0" Class="mud-width-full">
+        <MudImage Src="https://placehold.co/800x200/A0D9D9/333333?text=Profile+Banner" Alt="Profile banner" Style="object-fit: cover;"></MudImage>
+
+        <MudGrid Justify="Justify.Center" Spacing="0" Class="px-4 pb-4">
+            <MudItem xs="12" Class="d-flex justify-start" Style="margin-top: -75px;">
+                <MudAvatar Size="Size.Large" Style="width: 150px; height: 150px;" Variant="Variant.Outlined">
+                    <MudImage Src="https://files.catbox.moe/zcx6op.png"></MudImage>
+                </MudAvatar>
+            </MudItem>
+
+            <MudItem xs="12" Class="text-center mt-4">
+                <MudText Typo="Typo.h5" Class="mud-primary-text">@_loadedDisplayname</MudText>
+                <MudText Typo="Typo.subtitle1">@@@_loadedUsername</MudText>
+                <MudText Typo="Typo.subtitle2" Class="mt-2">about me!<br/>1<br/>2<br/>3</MudText>
+            </MudItem>
+        </MudGrid>
+    </MudCard>
+}
+
+@code
+{
+    private bool _isLoading;
+    private string? _errorMessage;
+
+    [Parameter] public string Username { get; set; }
+
+    private string _loadedUsername = "";
+    private string _loadedDisplayname = "";
+
+    protected override async void OnParametersSet()
+    {
+        if (_loadedUsername != Username || string.IsNullOrEmpty(_loadedUsername))
+            await LoadProfileAsync();
+    }
+
+    private async Task LoadProfileAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
+        if (string.IsNullOrEmpty(Username))
+        {
+            _errorMessage = "No user profile specified.";
+            _isLoading = false;
+            StateHasChanged();
+            return;
+        }
+
+        try
+        {
+            var user = await Db.GetUserByUsernameAsync(Username);
+
+            if (user is null)
+            {
+                _errorMessage = $"404 User {Username} Not Found.";
+                _isLoading = false;
+                StateHasChanged();
+                return;
+            }
+            
+            _loadedUsername = user.Username;
+            _loadedDisplayname = user.Displayname;
+            _isLoading = false;
+            StateHasChanged();
+            // TODO: Get about me
+            // TODO: Get profile picture
+            // TODO: Get banner
+        }
+        catch (Exception e)
+        {
+            Log.Error(e.Message);
+            _errorMessage = $"An error occurred while loading the profile for {Username}.";
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+}

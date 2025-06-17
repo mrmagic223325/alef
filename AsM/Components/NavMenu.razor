@@ -1,14 +1,30 @@
-<MudNavMenu Margin="Margin.Normal" Color="Color.Primary" Rounded="true">
+@inject AuthenticationStateProvider Auth
+
+<MudNavMenu>
+    
     <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.TwoTone.Home">Home</MudNavLink>
-    <MudDivider />
-        <AuthorizeView>
-            <NotAuthorized>
-                <MudNavLink Href="/Account/Signin" Match="NavLinkMatch.All" Icon="@Icons.Material.TwoTone.Login"><MudText Style="overflow: hidden; white-space: nowrap;">Sign in</MudText></MudNavLink>
-            </NotAuthorized>
-            <Authorized>
-                <MudNavLink Href="/Account/Profile" Match="NavLinkMatch.All" Icon="@Icons.Material.TwoTone.AccountBox">Profile</MudNavLink>
-                <MudNavLink Href="/Account/Signout" Match="NavLinkMatch.All" Icon="@Icons.Material.TwoTone.Logout" IconColor="Color.Error">Sign out</MudNavLink>
-                <MudNavLink Href="/Account/Settings" Match="NavLinkMatch.All" Icon="@Icons.Material.TwoTone.Settings">Settings</MudNavLink>
-            </Authorized>
-        </AuthorizeView>
+    
+    <AuthorizeView>
+        <NotAuthorized>
+                <MudNavLink Href="/_Account/Signin" Match="NavLinkMatch.All" Icon="@Icons.Material.TwoTone.Login"><MudText Style="overflow: hidden; white-space: nowrap;">Sign in</MudText></MudNavLink>
+        </NotAuthorized>
+
+        <Authorized>
+                <MudNavLink Href="@_username" Match="NavLinkMatch.All" Icon="@Icons.Material.TwoTone.AccountBox">Profile</MudNavLink>
+                <MudNavLink Href="/_Account/Signout" Match="NavLinkMatch.All" Icon="@Icons.Material.TwoTone.Logout" IconColor="Color.Error">Sign out</MudNavLink>
+                <MudNavLink Href="/_Account/Settings" Match="NavLinkMatch.All" Icon="@Icons.Material.TwoTone.Settings">Settings</MudNavLink>
+        </Authorized>
+    </AuthorizeView>
 </MudNavMenu>
+
+@code
+{
+    private string _username = "/_Account/Signin";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await Auth.GetAuthenticationStateAsync();
+        if (!string.IsNullOrEmpty(authState.User.Identity?.Name))
+            _username = string.Concat("/", authState.User.Identity?.Name);
+    }
+}

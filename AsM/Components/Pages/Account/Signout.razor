@@ -1,25 +1,49 @@
-@page "/Account/Signout"
+@page "/_Account/Signout"
 @using Microsoft.AspNetCore.Authorization
+@using Serilog
 
 @attribute [Authorize]
 
 @inject IJSRuntime JsRuntime
 @inject AuthenticationStateProvider Auth
+@inject NavigationManager Navigation
 
 <div style="height: 100vh; width: 100vw; display: flex; justify-content: center; align-items: center;">
     <MudCard Elevation="3" Style="width: 45%;">
-        <MudCardHeader><MudText Typo="Typo.h6">Log out of @Auth.GetAuthenticationStateAsync().Result.User.Identity.Name</MudText></MudCardHeader>
+        <MudCardHeader><MudText Typo="Typo.h6">Log out of @username</MudText></MudCardHeader>
         <MudCardActions>
-            <MudButton EndIcon="@Icons.Material.TwoTone.Logout" Variant="Variant.Filled" OnClick="@(async () => await SignOut())" IconColor="Color.Error" ButtonType="ButtonType.Button" DropShadow="false">Log out</MudButton>
+            <MudButton EndIcon="@Icons.Material.TwoTone.Logout" Variant="Variant.Filled" OnClick="PerformSignOut" IconColor="Color.Error" ButtonType="ButtonType.Button" DropShadow="false" Disabled="_isSigningOut">Log out</MudButton>
         </MudCardActions>
     </MudCard>
 </div>
 
 @code {
 
-    private async Task SignOut()
+    private string? username;
+    private bool _isSigningOut;
+
+    protected override async Task OnInitializedAsync()
     {
-        var authModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", "./auth.js");
-        await authModule.InvokeVoidAsync("SignOut",  "/");
+        var authState = await Auth.GetAuthenticationStateAsync();
+        username = authState.User.Identity?.Name ?? "your account";
+    }
+
+    private async Task PerformSignOut()
+    {
+        _isSigningOut = true;
+        try
+        {
+            var authModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", "./auth.js");
+            await authModule.InvokeVoidAsync("SignOut", "/");
+        }
+        catch (JSException e)
+        {
+            Log.Error("Error during sign out", e);
+            Navigation.NavigateTo("/", forceLoad: true);
+        }
+        finally
+        {
+            _isSigningOut = false;
+        }
     }
 }

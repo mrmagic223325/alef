@@ -1,11 +1,10 @@
 using System.Security.Claims;
+using AsM.Interfaces;
 using AsM.Models;
-using Cassandra.Mapping;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
-using Newtonsoft.Json;
-using JsonSerializer = System.Text.Json.JsonSerializer;
+using Serilog;
 
 namespace AsM.Api;
 
@@ -13,91 +12,59 @@ namespace AsM.Api;
 [ApiController]
 public class AuthController : ControllerBase
 {
+    private readonly IAuthService _authService;
+    private readonly ICassandraDbContext _databaseService; // Kept for backward compatibility
 
-    private readonly DatabaseService _databaseService;
-    
-    public AuthController(DatabaseService databaseService)
+    public AuthController(IAuthService authService, ICassandraDbContext databaseService)
     {
+        _authService = authService;
         _databaseService = databaseService;
     }
-    
-    private readonly AuthenticationProperties Properties = new()
+
+    private readonly AuthenticationProperties _properties = new()
     {
         AllowRefresh = true,
         ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(10),
         IsPersistent = true,
     };
 
-    // TODO: Error Handling
-    // TODO: Rework queries
     [HttpPost]
     [Route("api/auth/signin")]
     public async Task<IActionResult> SignInPost(SignInData value)
     {
-        var (cluster, session) = await _databaseService.Connect("accounts");
-
-        // Determine whether username or email is given and query the database accordingly
-        var q = value.Username.Contains("@") ? "email" : "username";
-
-        var st = await session.PrepareAsync($"SELECT id FROM users WHERE {q} = ? ALLOW FILTERING;");
-
-        var res = await session.ExecuteAsync(st.Bind(value.Username));
-
-        var id = res.FirstOrDefault().GetValue<Guid>("id");
-        
-        var r = await _databaseService.CheckPassword(id, value.Password);
-
-        var v = new ValidationProblemDetails(new Dictionary<string, string[]>()
-        {
-            { "Password", new[] { "Password incorrect." }}
-        });
-        
-        if (r == false)
-            return BadRequest(v);
-
         try
         {
-            MappingConfiguration.Global.Define(new Map<User>().TableName("users").PartitionKey(u => u.Id));
+            // Use the new AuthService to authenticate the user
+            var user = await _authService.AuthenticateAsync(value.Account, value.Password);
+
+            if (user == null || user.Id == null)
+            {
+                return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
+                {
+                    { "Credentials", ["Incorrect credentials."] }
+                }));
+            }
+
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.Email, user.Email ?? string.Empty),
+                new Claim(ClaimTypes.Name, user.Username ?? string.Empty),
+                new Claim("Guid", user.Id.ToString()!),
+            };
+
+            var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+
+            await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme,
+                new ClaimsPrincipal(identity),
+                _properties);
+
+            return Ok(new { Success = true });
         }
-        // TODO: Exception Handling
         catch (Exception e)
         {
-            ;
+            Log.Error(e, "An unexpected error occurred during sign in.");
+            return StatusCode(StatusCodes.Status500InternalServerError, "An internal error occurred.");
         }
-        IMapper mapper = new Mapper(session);
-        
-        st = await session.PrepareAsync($"SELECT * FROM users WHERE id = ?;");
-        var x = await mapper.SingleAsync<User>("SELECT * FROM users WHERE id = ?", id);
-        
-        Console.WriteLine(x.Id);
-        
-        if (q != "email")
-        {
-            st = await session.PrepareAsync($"SELECT email FROM users WHERE id = ?;");
-            res = await session.ExecuteAsync(st.Bind(id));
-            value.Email = res.FirstOrDefault().GetValue<string>("email");
-        }
-        else
-        {
-            st = await session.PrepareAsync($"SELECT username FROM users WHERE id = ?;");
-            res = await session.ExecuteAsync(st.Bind(id));
-            value.Username = res.FirstOrDefault().GetValue<string>("username");
-        }
-
-        var claims = new List<Claim>
-        {
-            new Claim(ClaimTypes.Email, value.Email),
-            new Claim(ClaimTypes.Name, value.Username),
-            new Claim("Guid", x.Id.ToString()),
-        };
-
-        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-        var p = Properties;
-
-        await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity),
-            p);
-
-        return Ok(new { Success = true });
     }
 
     [HttpPost]
@@ -110,8 +77,7 @@ public class AuthController : ControllerBase
 
     public class SignInData
     {
-        public string Username { get; set; }
-        public string Email { get; set; }
-        public string Password { get; set; }
+        public required string Account { get; set; }
+        public required string Password { get; set; }
     }
 }

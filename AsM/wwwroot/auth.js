@@ -1,4 +1,4 @@
-export function SignIn(dotnet, username, email, password, redirect)
+export function SignIn(dotnet, account, password)
 {
     var url = "/api/auth/signin";
     var xhr = new XMLHttpRequest();
@@ -10,17 +10,21 @@ export function SignIn(dotnet, username, email, password, redirect)
     xhr.onload = function () {
         if (xhr.status === 200)
         {
+            // Success
             dotnet.invokeMethodAsync('ValidationErrors', "");
-        } else if (xhr.status === 400)
+        } else
         {
             dotnet.invokeMethodAsync('ValidationErrors', xhr.responseText);
         }
     };
     
+    xhr.onerror = function ()  {
+        dotnet.invokeMethodAsync('ValidationErrors', 'A network error occurred. Please try again.')
+    };
+    
     var data = {
-        email: email,
+        account: account,
         password: password,
-        username: username,
         };
     
     xhr.send(JSON.stringify(data));
@@ -44,6 +48,5 @@ export function SignOut(redirect)
                 location.replace(redirect);
         }
     };
-    
     xhr.send();
 }
