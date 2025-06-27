@@ -1,11 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using AsM.Interfaces;
 using AsM.Models;
 using Cassandra;
 using Cassandra.Mapping;
-using Microsoft.Extensions.Configuration;
 using Serilog;
 using ISession = Cassandra.ISession;
 
@@ -16,8 +12,12 @@ namespace AsM.Data;
 /// </summary>
 public class CassandraDbContext : ICassandraDbContext
 {
-    private readonly IConfiguration _configuration;
-    private readonly Cluster _cluster;
+    public void Dispose()
+    {
+    }
+
+    private static Cluster _cluster;
+    private static readonly object ClusterLock = new();
 
     /// <summary>
     /// Initializes a new instance of the CassandraDbContext class
@@ -25,26 +25,36 @@ public class CassandraDbContext : ICassandraDbContext
     /// <param name="configuration">The application configuration</param>
     public CassandraDbContext(IConfiguration configuration)
     {
-        _configuration = configuration;
-        try
+        if (_cluster != null)
         {
-            Log.Information("Initializing Cassandra cluster connection.");
-            var contactPoint = Environment.GetEnvironmentVariable("IS_DOCKER") == "true"
-                ? _configuration["Cassandra:ProdUrl"]
-                : _configuration["Cassandra:LocalUrl"];
-
-            if (string.IsNullOrEmpty(contactPoint))
-            {
-                throw new ArgumentException("Cassandra URL is not configured.");
-            }
-
-            _cluster = Cluster.Builder().AddContactPoint(contactPoint).Build();
-            Log.Information("Successfully initialized Cassandra cluster connection.");
+            return;
         }
-        catch (Exception e)
+
+        lock (ClusterLock)
         {
-            Log.Fatal(e, "Failed to initialize Cassandra cluster.");
-            throw new Exception("Unrecoverable", e);
+            if (_cluster == null)
+            {
+                try
+                {
+                    Log.Information("Initializing Cassandra cluster connection.");
+                    var contactPoint = Environment.GetEnvironmentVariable("IS_DOCKER") == "true"
+                        ? configuration["Cassandra:ProdUrl"]
+                        : configuration["Cassandra:LocalUrl"];
+
+                    if (string.IsNullOrEmpty(contactPoint))
+                    {
+                        throw new ArgumentException("Cassandra URL is not configured.");
+                    }
+
+                    _cluster = Cluster.Builder().AddContactPoint(contactPoint).Build();
+                    Log.Information("Successfully initialized Cassandra cluster connection.");
+                }
+                catch (Exception e)
+                {
+                    Log.Fatal(e, "Failed to initialize Cassandra cluster.");
+                    throw new Exception("Unrecoverable", e);
+                }
+            }
         }
     }
 
@@ -334,11 +344,5 @@ public class CassandraDbContext : ICassandraDbContext
             Log.Error(e, "Failed to get email verification code for {Email}", email);
             return null;
         }
-    }
-
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        _cluster?.Dispose();
     }
 }

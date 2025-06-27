@@ -1,9 +1,12 @@
 @page "/{Username}"
 @using AsM.Interfaces
+@using Microsoft.AspNetCore.Authentication
 @using Serilog
 
 @inject ICassandraDbContext Db
-
+@inject AuthenticationStateProvider Auth
+@inject NavigationManager Navigation
+@inject IDialogService Dialog
 
 @if (_isLoading)
 {
@@ -20,18 +23,78 @@ else if (!string.IsNullOrEmpty(_errorMessage))
 else
 {
     <MudCard Elevation="0" Class="mud-width-full">
-        <MudImage Src="https://placehold.co/800x200/A0D9D9/333333?text=Profile+Banner" Alt="Profile banner" Style="object-fit: cover;"></MudImage>
+        <MudImage Src="https://placehold.co/800x200/A0D9D9/333333?text=Profile+Banner" Alt="Profile banner" Fluid="true"></MudImage>
 
         <MudGrid Justify="Justify.Center" Spacing="0" Class="px-4 pb-4">
-            <MudItem xs="12" Class="d-flex justify-start" Style="margin-top: -75px;">
-                <MudAvatar Size="Size.Large" Style="width: 150px; height: 150px;" Variant="Variant.Outlined">
-                    <MudImage Src="https://files.catbox.moe/zcx6op.png"></MudImage>
-                </MudAvatar>
+            
+            <style>
+                .profile-avatar-responsive-size
+                {
+                    width: 7rem  !important;
+                    height: 7rem !important;
+                }
+                
+                @@media (min-width: 600px)
+                {
+                .profile-avatar-responsive-size
+                {
+                    width: 10rem !important;
+                    height: 10rem !important;
+                }
+                }
+
+                .avatar-section-responsive-mt
+                {
+                    margin-top: -3rem !important;
+                }
+
+                .edit-button-responsive-mt
+                {
+                    margin-top: 4rem !important;
+                }
+
+                @@media (min-width: 600px)
+                {
+                .avatar-section-responsive-mt
+                {
+                    margin-top: -5rem !important;
+                }
+                    .edit-button-responsive-mt    
+                    {
+                        margin-top: 5.5rem !important;
+                    }
+                }
+            </style>
+            
+            <MudItem xs="12" Class="d-flex align-items-start justify-space-between avatar-section-responsive-mt">
+                
+                @if (_loadedUsername == authState.User.Identity.Name)
+                {
+                    <MudLink OnClick="OpenUpdateDialog" Underline="Underline.None" Color="Color.Inherit" Class="d-flex" Style="cursor: pointer;">
+                        <MudAvatar Class="profile-avatar-responsive-size" Variant="Variant.Outlined">
+                            <!-- TODO: Actual profile picture -->
+                            <MudImage Src="https://files.catbox.moe/zcx6op.png"></MudImage>
+                        </MudAvatar>
+                    </MudLink>
+                }
+                else
+                {
+                    <MudAvatar Size="Size.Large" Variant="Variant.Outlined" Class="profile-avatar-responsive-size">
+                        <!-- TODO: Actual profile picture -->
+                        <MudImage Src="https://files.catbox.moe/zcx6op.png"></MudImage>
+                    </MudAvatar>
+                }
+                
+                
+                @if (_loadedUsername == authState.User.Identity.Name)
+                {
+                    <MudFab Class="edit-button-responsive-mt" Color="Color.Primary" StartIcon="@Icons.Material.TwoTone.Edit" OnClick='() => Navigation.NavigateTo("/_Account/Settings")'></MudFab>
+                }
             </MudItem>
 
-            <MudItem xs="12" Class="text-center mt-4">
-                <MudText Typo="Typo.h5" Class="mud-primary-text">@_loadedDisplayname</MudText>
-                <MudText Typo="Typo.subtitle1">@@@_loadedUsername</MudText>
+            <MudItem xs="12" Class="text-center mt-2">
+                <MudText Typo="Typo.h5" Color="Color.Primary">@_loadedDisplayname</MudText>
+                <MudText Typo="Typo.subtitle1" Class="mt-n1">@@@_loadedUsername</MudText>
                 <MudText Typo="Typo.subtitle2" Class="mt-2">about me!<br/>1<br/>2<br/>3</MudText>
             </MudItem>
         </MudGrid>
@@ -40,6 +103,8 @@ else
 
 @code
 {
+    AuthenticationState authState { get; set; }
+    
     private bool _isLoading;
     private string? _errorMessage;
 
@@ -48,6 +113,12 @@ else
     private string _loadedUsername = "";
     private string _loadedDisplayname = "";
 
+    private Task OpenUpdateDialog()
+    {
+        var options = new DialogOptions() { CloseOnEscapeKey = true };
+        return Dialog.ShowAsync<UpdateProfilePicture>("Update Profile Picture", options);
+    }
+    
     protected override async void OnParametersSet()
     {
         if (_loadedUsername != Username || string.IsNullOrEmpty(_loadedUsername))
@@ -78,6 +149,8 @@ else
                 StateHasChanged();
                 return;
             }
+
+            authState = await Auth.GetAuthenticationStateAsync();
             
             _loadedUsername = user.Username;
             _loadedDisplayname = user.Displayname;

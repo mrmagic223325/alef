@@ -1,0 +1,104 @@
+@using Microsoft.AspNetCore.Mvc.Infrastructure
+
+<MudDialog>
+    <TitleContent>
+        Update Profile Picture
+    </TitleContent>
+    <DialogContent>
+        <MudGrid Justify="Justify.Center">
+            <MudItem xs=4 Class="d-flex justify-content-center">
+                <MudAvatar Variant="Variant.Outlined" Size="Size.Large">
+                    <!-- TODO: Actual profile picture -->
+                    <MudImage Src="https://files.catbox.moe/zcx6op.png"></MudImage>
+                </MudAvatar>
+            </MudItem>
+            
+            <MudItem xs="4" Class="d-flex justify-content-center justify-center align-center">
+                <MudIcon Icon="@Icons.Material.TwoTone.East" Size="Size.Large" Color="Color.Inherit" />
+            </MudItem>
+            
+            <MudItem xs=4 Class="d-flex justify-content-center">
+            
+                <MudFileUpload T="IBrowserFile" Accept=".png, .jpg, .webp" FilesChanged="UploadPicture" MaximumFileCount="1" Style="cursor: pointer;">
+                    <ActivatorContent>
+                        <MudAvatar Variant="Variant.Outlined" Size="Size.Large">
+                            <!-- TODO: Actual profile picture -->
+                            @if (imageUrl is not null)
+                            {
+                                <MudImage Src="@imageUrl"></MudImage>
+                            }
+                        </MudAvatar>
+                    </ActivatorContent>
+                </MudFileUpload>
+            </MudItem>
+        </MudGrid>
+
+    </DialogContent>
+    <DialogActions>
+        <MudGrid Justify="Justify.SpaceBetween">
+            <MudItem>
+                <MudButton OnClick="Cancel">Cancel</MudButton>
+            </MudItem>
+            
+            <MudItem>
+                <MudButton OnClick="Change" Color="Color.Primary">Change</MudButton>
+            </MudItem>
+        </MudGrid>
+    </DialogActions>
+</MudDialog>
+
+@code
+{
+    [CascadingParameter]
+    private IMudDialogInstance? MudDialog { get; set; }
+
+    private string? _filePath;
+    private IBrowserFile? _file;
+    private string? imageUrl;
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Change()
+    {
+        await using var stream = _file.OpenReadStream();
+        await using var fileStream = System.IO.File.Create(_filePath);
+        await stream.CopyToAsync(fileStream);
+        
+        // TODO: Change pfp in database
+    }
+    
+    private async void UploadPicture(IBrowserFile? file)
+    {
+        if (file is null)
+            return;
+
+        try
+        {
+            using (var memoryStream = new MemoryStream())
+            {
+                await file.OpenReadStream().CopyToAsync(memoryStream);
+                var base64 = Convert.ToBase64String(memoryStream.ToArray());
+                imageUrl = $"data:{file.ContentType};base64,{base64}";
+            }
+            
+            // TODO: Set better directory
+            var uploads = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
+            if (!Directory.Exists(uploads))
+            {
+                Directory.CreateDirectory(uploads);
+            }
+
+            var unique = Guid.NewGuid().ToString() + Path.GetExtension(file.Name);
+            var path = Path.Combine(uploads, unique);
+            
+            // TODO: Remove hardcoded path
+            _filePath = path;
+            _file = file;
+            StateHasChanged();
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e.Message);
+        }
+    }
+}
