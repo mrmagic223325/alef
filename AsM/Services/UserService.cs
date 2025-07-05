@@ -39,7 +39,20 @@ public class UserService : IUserService
             return null;
         }
     }
-
+    
+    public async Task<User?> GetUserAsync(string username)
+    {
+        try
+        {
+            return await _dbContext.GetUserByUsernameAsync(username);
+        }
+        catch (Exception e)
+        {
+            Log.Error(e, "Failed to get user with username {username}", username);
+            return null;
+        }
+    }
+    
     /// <inheritdoc />
     public async Task<List<User>?> GetUsersAsync()
     {

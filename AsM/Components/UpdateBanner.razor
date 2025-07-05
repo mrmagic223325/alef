@@ -9,17 +9,15 @@
 
 <MudDialog>
     <TitleContent>
-        Update Profile Picture
+        Update Banner
     </TitleContent>
     <DialogContent>
         <MudGrid Justify="Justify.Center">
             <MudItem xs=4 Class="d-flex justify-content-center">
-                <MudAvatar Variant="Variant.Outlined" Size="Size.Large">
-                    <MudImage Src=@_profilePicturePath></MudImage>
-                </MudAvatar>
+                <MudImage Width="300" Height="150" Src=@_bannerPicturePath></MudImage>
             </MudItem>
             
-            <MudItem xs="4" Class="d-flex justify-content-center justify-center align-center">
+            <MudItem xs=4 Class="d-flex justify-content-center justify-center align-center">
                 <MudIcon Icon="@Icons.Material.TwoTone.East" Size="Size.Large" Color="Color.Inherit" />
             </MudItem>
             
@@ -27,12 +25,14 @@
             
                 <MudFileUpload T="IBrowserFile" Accept=".png, .jpg, .webp" FilesChanged="UploadPicture" MaximumFileCount="1" Style="cursor: pointer;">
                     <ActivatorContent>
-                        <MudAvatar Variant="Variant.Outlined" Size="Size.Large">
-                            @if (imageUrl is not null)
-                            {
-                                <MudImage Src="@imageUrl"></MudImage>
-                            }
-                        </MudAvatar>
+                        @if (imageUrl is not null)
+                        {
+                            <MudImage Width="300" Height="150" Class="border border-solid" Src="@imageUrl"></MudImage>
+                        }
+                        else
+                        {
+                            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="290px" Height="150px"></MudSkeleton>
+                        }
                     </ActivatorContent>
                 </MudFileUpload>
             </MudItem>
@@ -61,11 +61,11 @@
 {
     [CascadingParameter]
     private IMudDialogInstance MudDialog { get; set; }
-    
+
     private string? _filePath;
     private IBrowserFile? _file;
     private string? imageUrl;
-    private string _profilePicturePath = "";
+    private string _bannerPicturePath = "";
     private bool _tooBig;
 
     protected override async Task OnInitializedAsync()
@@ -76,12 +76,12 @@
             var userGuid = authState.User.FindFirstValue("Guid");
             if (userGuid != null)
             {
-                _profilePicturePath = $"/profile_pictures/{userGuid}.webp";
+                _bannerPicturePath = $"/banner_pictures/{userGuid}.webp";
             }
             else
             {
                 Console.WriteLine("User ID not found.");
-                _profilePicturePath = "/profile_pictures/default.webp";
+                _bannerPicturePath = "/banner_pictures/default.webp";
             }
         }
         catch (Exception e)
@@ -92,23 +92,23 @@
 
         await base.OnInitializedAsync();
     }
-    
+
     private void Cancel() => MudDialog.Cancel();
 
     private async Task Change()
     {
         // Should not be possible but just to make sure.
-        if (_file.Size > 20000000)
+        if (_file.Size > 25000000)
         {
             _tooBig = true;
             StateHasChanged();
             return;
         }
-        await using var stream = _file.OpenReadStream(maxAllowedSize: 20000000);
+        await using var stream = _file.OpenReadStream(maxAllowedSize: 25000000);
         using Image image = await Image.LoadAsync(stream);
         var encoder = new WebpEncoder
         {
-            Quality = 5,
+            Quality = 100,
             FileFormat = WebpFileFormatType.Lossy,
             Method = 0,
             NearLossless = false,
@@ -129,18 +129,19 @@
         {
             using (var memoryStream = new MemoryStream())
             {
-                if (file.Size > 20000000)
+                if (file.Size > 25000000)
                 {
                     _tooBig = true;
                     StateHasChanged();
                     return;
                 }
-                await file.OpenReadStream(maxAllowedSize: 20000000).CopyToAsync(memoryStream);
+                await file.OpenReadStream(maxAllowedSize: 25000000).CopyToAsync(memoryStream);
                 var base64 = Convert.ToBase64String(memoryStream.ToArray());
                 imageUrl = $"data:{file.ContentType};base64,{base64}";
             }
             
-            var uploads = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "profile_pictures");
+            // TODO: Set better directory
+            var uploads = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "banner_pictures");
             if (!Directory.Exists(uploads))
             {
                 Directory.CreateDirectory(uploads);

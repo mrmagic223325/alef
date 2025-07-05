@@ -18,6 +18,13 @@ public interface IUserService
     Task<User?> GetUserAsync(Guid id);
     
     /// <summary>
+    /// Gets a user by their username
+    /// </summary>
+    /// <param name="username">The user's username</param>
+    /// <returns>The user if found, null otherwise</returns>
+    Task<User?> GetUserAsync(string username);
+    
+    /// <summary>
     /// Gets all users
     /// </summary>
     /// <returns>A list of all users</returns>

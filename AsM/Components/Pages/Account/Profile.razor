@@ -1,12 +1,13 @@
 @page "/{Username}"
+@using System.Security.Claims
 @using AsM.Interfaces
-@using Microsoft.AspNetCore.Authentication
 @using Serilog
 
 @inject ICassandraDbContext Db
 @inject AuthenticationStateProvider Auth
 @inject NavigationManager Navigation
 @inject IDialogService Dialog
+@inject IUserService UserService
 
 @if (_isLoading)
 {
@@ -23,10 +24,19 @@ else if (!string.IsNullOrEmpty(_errorMessage))
 else
 {
     <MudCard Elevation="0" Class="mud-width-full">
-        <MudImage Src="https://placehold.co/800x200/A0D9D9/333333?text=Profile+Banner" Alt="Profile banner" Fluid="true"></MudImage>
-
+        @if (_loadedUsername == authState.User.Identity.Name)
+        {
+            <MudLink OnClick="OpenBannerPictureUpdateDialog" Underline="Underline.None" Color="Color.Inherit" Class="d-flex" Style="cursor: pointer;">
+                <MudImage Src=@_bannerPicturePath Alt="Profile banner" Fluid="true" Style="width: 100%;"></MudImage>
+            </MudLink>
+        }
+        else
+        {
+            <MudImage Src=@_bannerPicturePath Alt="Profile banner" Fluid="true"></MudImage>
+        }
+        
         <MudGrid Justify="Justify.Center" Spacing="0" Class="px-4 pb-4">
-            
+
             <style>
                 .profile-avatar-responsive-size
                 {
@@ -65,27 +75,25 @@ else
                     }
                 }
             </style>
-            
+
             <MudItem xs="12" Class="d-flex align-items-start justify-space-between avatar-section-responsive-mt">
-                
+
                 @if (_loadedUsername == authState.User.Identity.Name)
                 {
-                    <MudLink OnClick="OpenUpdateDialog" Underline="Underline.None" Color="Color.Inherit" Class="d-flex" Style="cursor: pointer;">
+                    <MudLink OnClick="OpenProfilePictureUpdateDialog" Underline="Underline.None" Color="Color.Inherit" Class="d-flex" Style="cursor: pointer;">
                         <MudAvatar Class="profile-avatar-responsive-size" Variant="Variant.Outlined">
-                            <!-- TODO: Actual profile picture -->
-                            <MudImage Src="https://files.catbox.moe/zcx6op.png"></MudImage>
+                            <MudImage Src=@_profilePicturePath></MudImage>
                         </MudAvatar>
                     </MudLink>
                 }
                 else
                 {
                     <MudAvatar Size="Size.Large" Variant="Variant.Outlined" Class="profile-avatar-responsive-size">
-                        <!-- TODO: Actual profile picture -->
-                        <MudImage Src="https://files.catbox.moe/zcx6op.png"></MudImage>
+                        <MudImage Src=@_profilePicturePath></MudImage>
                     </MudAvatar>
                 }
-                
-                
+
+
                 @if (_loadedUsername == authState.User.Identity.Name)
                 {
                     <MudFab Class="edit-button-responsive-mt" Color="Color.Primary" StartIcon="@Icons.Material.TwoTone.Edit" OnClick='() => Navigation.NavigateTo("/_Account/Settings")'></MudFab>
@@ -112,10 +120,18 @@ else
 
     private string _loadedUsername = "";
     private string _loadedDisplayname = "";
-
-    private Task OpenUpdateDialog()
+    private string _profilePicturePath = "";
+    private string _bannerPicturePath = "";
+    
+    private Task OpenBannerPictureUpdateDialog()
     {
-        var options = new DialogOptions() { CloseOnEscapeKey = true };
+        var options = new DialogOptions() { CloseOnEscapeKey = true, BackdropClick = false, MaxWidth = MaxWidth.Medium, FullWidth = true };
+        return Dialog.ShowAsync<UpdateBanner>("Update Banner Picture", options);
+    }
+    
+    private Task OpenProfilePictureUpdateDialog()
+    {
+        var options = new DialogOptions() { CloseOnEscapeKey = true, BackdropClick = false };
         return Dialog.ShowAsync<UpdateProfilePicture>("Update Profile Picture", options);
     }
     
@@ -152,10 +168,22 @@ else
 
             authState = await Auth.GetAuthenticationStateAsync();
             
+            if (authState.User.Identity.IsAuthenticated)
+            {
+                _profilePicturePath = $"/profile_pictures/{authState.User.FindFirstValue("Guid")}.webp";
+                _bannerPicturePath = $"/banner_pictures/{authState.User.FindFirstValue("Guid")}.webp";
+            }
+            else
+            {
+                var uuid = await UserService.GetUserAsync(Username);
+                _profilePicturePath = $"/profile_pictures/{uuid.Id}.webp";
+                _bannerPicturePath = $"/banner_pictures/{uuid.Id}.webp";
+            }
             _loadedUsername = user.Username;
             _loadedDisplayname = user.Displayname;
             _isLoading = false;
             StateHasChanged();
+            
             // TODO: Get about me
             // TODO: Get profile picture
             // TODO: Get banner
