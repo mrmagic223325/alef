@@ -179,6 +179,14 @@ else
                 _profilePicturePath = $"/profile_pictures/{uuid.Id}.webp";
                 _bannerPicturePath = $"/banner_pictures/{uuid.Id}.webp";
             }
+
+
+	    if (!Path.Exists("/root/AsM/AsM/wwwroot" + _profilePicturePath))
+	      _profilePicturePath = "/profile_pictures/default.webp";
+
+	    if (!Path.Exists("/root/AsM/AsM/wwwroot" + _bannerPicturePath))
+	      _bannerPicturePath = "/banner_pictures/default.webp";
+
             _loadedUsername = user.Username;
             _loadedDisplayname = user.Displayname;
             _isLoading = false;

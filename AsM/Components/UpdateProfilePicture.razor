@@ -77,11 +77,9 @@
             if (userGuid != null)
             {
                 _profilePicturePath = $"/profile_pictures/{userGuid}.webp";
-            }
-            else
-            {
-                Console.WriteLine("User ID not found.");
-                _profilePicturePath = "/profile_pictures/default.webp";
+
+                if (!Path.Exists("/root/AsM/AsM/wwwroot" + _profilePicturePath))
+		  _profilePicturePath = "/profile_pictures/default.webp";
             }
         }
         catch (Exception e)
@@ -117,6 +115,7 @@
         };
         
         await image.SaveAsync(_filePath + ".webp", encoder);
+        await Task.Delay(TimeSpan.FromSeconds(1));
         Navigation.Refresh(true);
     }
     
@@ -140,7 +139,7 @@
                 imageUrl = $"data:{file.ContentType};base64,{base64}";
             }
             
-            var uploads = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "profile_pictures");
+            var uploads = Path.Combine("/root/AsM/AsM/wwwroot", "profile_pictures");
             if (!Directory.Exists(uploads))
             {
                 Directory.CreateDirectory(uploads);

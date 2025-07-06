@@ -186,6 +186,9 @@ public class CassandraDbContext : ICassandraDbContext
             using var session = await ConnectToKeyspaceAsync("accounts");
             if (session == null) return false;
 
+            if (user.Id == null)
+              user.Id = Guid.NewGuid();
+
             var statement = await session.PrepareAsync("INSERT INTO accounts.users (id, dob, email, username, displayname) VALUES (?, ?, ?, ?, ?)");
             await session.ExecuteAsync(statement.Bind(user.Id, user.Dob, user.Email, user.Username, user.Displayname));
             return true;

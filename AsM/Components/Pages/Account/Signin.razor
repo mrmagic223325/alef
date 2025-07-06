@@ -223,7 +223,7 @@
         if (_signupForm.IsValid)
         {
             _signupModel.Username = _signupModel.Username.ToLower();
-            await Db.CreateUserAsync(new User { Username = _signupModel.Username, Displayname = _signupModel.Displayname, Email = _signupModel.Email });
+            await Db.CreateUserAsync(new User { Id = _signupModel.Id, Username = _signupModel.Username, Displayname = _signupModel.Displayname, Email = _signupModel.Email });
             await Auth.SetPasswordAsync(_signupModel.Id, _signupModel.Password);
             await SendEmail(_signupModel.Email);
 

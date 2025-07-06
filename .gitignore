@@ -3,6 +3,5 @@ obj/
 /packages/
 riderModule.iml
 /_ReSharper.Caches/
-AsM/appsettings.json
 AsM/appsettings.Development.json
 AsM.sln.DotSettings.user
